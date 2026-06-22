@@ -107,6 +107,11 @@ export class DockerDashboard implements OnDestroy, AfterViewInit {
   totalCpuUsage = computed(() => this.runningContainers().reduce((acc, c) => acc + (c.stats?.cpu || 0), 0));
   totalMemUsage = computed(() => this.runningContainers().reduce((acc, c) => acc + (c.stats?.memory || 0), 0));
   
+  stoppedContainersCount = computed(() => this.containers().length - this.runningContainersCount());
+  activeContainersRatio = computed(() => this.containers().length > 0 ? (this.runningContainersCount() / this.containers().length) * 100 : 0);
+  cpuUtilizationPercent = computed(() => Math.min(100, this.totalCpuUsage()));
+  memUtilizationPercent = computed(() => Math.min(100, (this.totalMemUsage() / 1536) * 100));
+  
   hostStatsHistory: { timestamp: Date; cpu: number; memory: number }[] = [];
   private resizeObserver: ResizeObserver | null = null;
 

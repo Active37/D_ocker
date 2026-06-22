@@ -499,23 +499,108 @@
                   </div>
                 </div>
 
-                <!-- Host aggregate specs -->
-                <div class="grid grid-cols-2 gap-3 text-left">
-                  <div class="bg-slate-900/30 border border-slate-850 rounded-xl p-3">
-                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block leading-none">Total CPU Load</span>
-                    <span class="text-lg font-mono font-bold text-sky-400 block mt-1">{{ totalCpuUsage().toFixed(1) }}%</span>
-                    <div class="w-full bg-slate-950 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div class="bg-sky-450 h-full rounded-full" [style.width.%]="Math.min(100, totalCpuUsage())"></div>
-                    </div>
-                  </div>
+                <!-- Host aggregate specs & Active Container Counts Visualization -->
+                <div class="space-y-4 bg-slate-900/30 border border-slate-850 rounded-xl p-4 text-left" id="workspace-aggregate-visualization-widget">
                   
-                  <div class="bg-slate-900/30 border border-slate-850 rounded-xl p-3">
-                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block leading-none">Total Memory Usage</span>
-                    <span class="text-lg font-mono font-bold text-emerald-400 block mt-1">{{ totalMemUsage().toFixed(1) }}M</span>
-                    <div class="w-full bg-slate-950 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div class="bg-emerald-455 h-full rounded-full" [style.width.%]="Math.min(100, (totalMemUsage() / 1536) * 100)"></div>
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">Interactive Cluster Health</span>
+                    <span class="text-[9px] font-mono font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/25">
+                      {{ runningContainersCount() }} / {{ containers().length }} RUNNING
+                    </span>
+                  </div>
+
+                  <!-- 3 Visual indicators grids -->
+                  <div class="grid grid-cols-3 gap-3">
+                    
+                    <!-- SVG Dial 1: Active Containers vs Stopped -->
+                    <div class="flex flex-col items-center justify-center bg-slate-950/40 border border-slate-850/60 rounded-xl p-2.5 text-center relative overflow-hidden">
+                      <div class="relative w-14 h-14 flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90">
+                          <!-- Background static light path -->
+                          <circle cx="28" cy="28" r="23" stroke="#1e293b" stroke-width="3" fill="transparent" />
+                          <!-- Active foreground indicator path -->
+                          <circle cx="28" cy="28" r="23" stroke="#10b981" stroke-width="3" fill="transparent"
+                            [style.strokeDasharray]="144.5"
+                            [style.strokeDashoffset]="144.5 - (144.5 * activeContainersRatio() / 100)" />
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                          <span class="text-xs font-mono font-bold text-white">{{ runningContainersCount() }}</span>
+                          <span class="text-[7.5px] text-slate-400 uppercase tracking-tighter mt-0.5">conts</span>
+                        </div>
+                      </div>
+                      <span class="text-[8px] font-bold text-slate-400 mt-2 uppercase tracking-widest leading-none">Cluster Nodes</span>
+                    </div>
+
+                    <!-- SVG Dial 2: Total CPU Utilization percentage -->
+                    <div class="flex flex-col items-center justify-center bg-slate-950/40 border border-slate-850/60 rounded-xl p-2.5 text-center relative overflow-hidden">
+                      <div class="relative w-14 h-14 flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90">
+                          <circle cx="28" cy="28" r="23" stroke="#1e293b" stroke-width="3" fill="transparent" />
+                          <circle cx="28" cy="28" r="23" stroke="#0ea5e9" stroke-width="3" fill="transparent"
+                            [style.strokeDasharray]="144.5"
+                            [style.strokeDashoffset]="144.5 - (144.5 * cpuUtilizationPercent() / 100)" />
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                          <span class="text-xs font-mono font-bold text-white">{{ totalCpuUsage().toFixed(1) }}%</span>
+                          <span class="text-[7.5px] text-slate-400 uppercase tracking-tighter mt-0.5">vCPU</span>
+                        </div>
+                      </div>
+                      <span class="text-[8px] font-bold text-slate-400 mt-2 uppercase tracking-widest leading-none">CPU Allocation</span>
+                    </div>
+
+                    <!-- SVG Dial 3: Total memory utilization gauge -->
+                    <div class="flex flex-col items-center justify-center bg-slate-[#1e293b] bg-slate-950/40 border border-slate-850/60 rounded-xl p-2.5 text-center relative overflow-hidden">
+                      <div class="relative w-14 h-14 flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90">
+                          <circle cx="28" cy="28" r="23" stroke="#1e293b" stroke-width="3" fill="transparent" />
+                          <circle cx="28" cy="28" r="23" stroke="#10b981" stroke-width="3" fill="transparent"
+                            [style.strokeDasharray]="144.5"
+                            [style.strokeDashoffset]="144.5 - (144.5 * memUtilizationPercent() / 100)" />
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                          <span class="text-xs font-mono font-bold text-white">{{ totalMemUsage().toFixed(0) }}M</span>
+                          <span class="text-[7.5px] text-slate-400 uppercase tracking-tighter mt-0.5">/1536M</span>
+                        </div>
+                      </div>
+                      <span class="text-[8px] font-bold text-slate-400 mt-2 uppercase tracking-widest leading-none">RAM Pool</span>
+                    </div>
+
+                  </div>
+
+                  <!-- Bottom aggregate indicators summary with linear bars -->
+                  <div class="bg-slate-950/30 rounded-lg p-2.5 border border-slate-850/50 text-left space-y-2 mt-2">
+                    <!-- Progress bar 1: Running vs Stopped Nodes -->
+                    <div>
+                      <div class="flex justify-between items-center text-[9px] font-mono leading-none mb-1 text-slate-400">
+                        <span>Node Status Grid</span>
+                        <span class="text-slate-350">{{ runningContainersCount() }} active / {{ stoppedContainersCount() }} stopped</span>
+                      </div>
+                      <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden flex">
+                        <div class="bg-gradient-to-r from-emerald-500 to-green-400 h-full transition-all duration-300" [style.width.%]="activeContainersRatio()"></div>
+                        <div class="bg-[#1e293b] h-full flex-grow transition-all duration-300"></div>
+                      </div>
+                    </div>
+
+                    <!-- Highlighted grid of individual active/stopped container cells -->
+                    <div class="flex items-center gap-1.5 pt-1">
+                      <span class="text-[8px] font-bold text-slate-500 uppercase tracking-wider font-mono">Cluster Map:</span>
+                      <div class="flex items-center gap-1">
+                        @for (c of containers(); track c.id) {
+                          <span [title]="c.name + ' (' + c.status + ')'" 
+                            class="w-2.5 h-2.5 rounded transition-all duration-200"
+                            [class.bg-emerald-500]="c.status === 'running'"
+                            [class.bg-slate-700]="c.status !== 'running'"
+                            [class.shadow-[0_0_6px_rgba(16,185,129,0.4)]]="c.status === 'running'"
+                            [class.animate-pulse]="c.status === 'running'">
+                          </span>
+                        }
+                        @if (containers().length === 0) {
+                          <span class="text-[8px] text-slate-600 font-mono italic">No cluster containers created</span>
+                        }
+                      </div>
                     </div>
                   </div>
+
                 </div>
 
                 <!-- Chart 1: Host Stats Over Time Trend (SVG wrapper) -->
