@@ -1,0 +1,1777 @@
+<div class="min-h-screen bg-[#06101e] text-slate-100 flex flex-col font-sans" id="docker-desktop-simulator">
+  
+  <!-- Main Header Navigation -->
+  <header class="bg-[#0b1527] border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-40 shadow-md shadow-black/10">
+    <div class="flex items-center gap-3">
+      <div class="bg-[#2496ed] p-2 rounded-lg text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <mat-icon class="text-2xl">dns</mat-icon>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg tracking-tight text-white flex items-center gap-2">
+          DOCKER DESKTOP <span class="text-xs bg-cyan-500/10 text-cyan-400 font-medium px-2 py-0.5 rounded border border-cyan-500/20">SIMULATOR v1.43</span>
+        </h1>
+        <p class="text-xs text-slate-400">Interactive sandbox environments, custom bridges, volumes, and AI Copilot</p>
+      </div>
+    </div>
+
+    <!-- Quick Host Machine Status Diagnostics Metrics -->
+    <div class="hidden md:flex items-center gap-8 text-xs bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+      <div class="flex items-center gap-2">
+        <mat-icon class="text-[#2496ed] text-sm">computer</mat-icon>
+        <span class="text-slate-400">Host RAM:</span>
+        <span class="font-mono text-slate-100 font-semibold text-xs text-right min-w-[50px]">2.4 / 8.0 GB</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <mat-icon class="text-slate-400 text-sm">speed</mat-icon>
+        <span class="text-slate-400">Daemon Load:</span>
+        <span class="font-mono text-emerald-400 font-semibold text-xs text-right min-w-[20px]">8%</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="text-emerald-400 font-medium text-xs">Docker Engine Active</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Left Sidebar Navigation + Main Dashboard Canvas -->
+  <div class="flex flex-1 overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 bg-[#080f1a] border-r border-slate-800 flex flex-col justify-between" id="desktop-sidebar">
+      <div class="py-4">
+        <span class="px-5 text-[10px] font-bold tracking-wider text-slate-500 uppercase">Docker Console</span>
+        <nav class="mt-3 space-y-1 px-2">
+          
+          <button (click)="activeTab.set('dashboard')"
+            [class.bg-[#111e35]]="activeTab() === 'dashboard'"
+            [class.text-[#2496ed]]="activeTab() === 'dashboard'"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium">
+            <mat-icon class="text-lg">space_dashboard</mat-icon>
+            Dashboard Overview
+          </button>
+
+          <button (click)="activeTab.set('containers')"
+            [class.bg-[#111e35]]="activeTab() === 'containers'"
+            [class.text-[#2496ed]]="activeTab() === 'containers'"
+            class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium">
+            <span class="flex items-center gap-3">
+              <mat-icon class="text-lg">layers</mat-icon>
+              Containers
+            </span>
+            <span class="bg-slate-800 text-slate-300 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+              {{ containers().length }}
+            </span>
+          </button>
+
+          <button (click)="activeTab.set('images')"
+            [class.bg-[#111e35]]="activeTab() === 'images'"
+            [class.text-[#2496ed]]="activeTab() === 'images'"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium">
+            <mat-icon class="text-lg">filter_none</mat-icon>
+            Dockerfile & Images
+          </button>
+
+          <button (click)="activeTab.set('volumes')"
+            [class.bg-[#111e35]]="activeTab() === 'volumes'"
+            [class.text-[#2496ed]]="activeTab() === 'volumes'"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium">
+            <mat-icon class="text-lg">folder</mat-icon>
+            Persistent Volumes
+          </button>
+
+          <button (click)="activeTab.set('networks')"
+            [class.bg-[#111e35]]="activeTab() === 'networks'"
+            [class.text-[#2496ed]]="activeTab() === 'networks'"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium">
+            <mat-icon class="text-lg">lan</mat-icon>
+            Virtual Networks
+          </button>
+
+          <button (click)="activeTab.set('copilot')"
+            [class.bg-[#111e35]]="activeTab() === 'copilot'"
+            [class.text-purple-400]="activeTab() === 'copilot'"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium border-l-2"
+            [class.border-transparent]="activeTab() !== 'copilot'"
+            [class.border-purple-500]="activeTab() === 'copilot'">
+            <mat-icon class="text-lg text-purple-400">psychology</mat-icon>
+            AI DevOps Copilot
+          </button>
+
+        </nav>
+      </div>
+
+      <!-- User secrets guidelines helper footprint -->
+      <div class="p-4 mx-3 my-4 bg-slate-900/60 border border-slate-800/80 rounded-xl space-y-2">
+        <p class="text-[10px] text-slate-400 leading-normal">
+          To consult the AI with real-time answers, define <code class="text-blue-400 font-mono text-[9px]">GEMINI_API_KEY</code> in the <b>Secrets</b> panel.
+        </p>
+      </div>
+    </aside>
+
+    <!-- Content Workspace -->
+    <main class="flex-1 overflow-y-auto px-6 py-6 bg-[#040913]">
+      
+      <!-- TAB 1: DASHBOARD OVERVIEW -->
+      @if (activeTab() === 'dashboard') {
+        <div class="space-y-6">
+          <div class="bg-gradient-to-r from-[#111d33] to-[#0b1424] p-6 rounded-2xl border border-slate-800 shadow-xl relative overflow-hidden">
+            <div class="absolute -right-12 -top-12 text-[#2496ed]/5 absolute-scale select-none pointer-events-none">
+              <span class="material-icons text-[15rem]">dns</span>
+            </div>
+            <span class="text-xs text-[#2496ed] font-semibold tracking-wider uppercase">Welcome to the Sandbox</span>
+            <h2 class="text-2xl font-bold text-white mt-1">Docker Environment Lab</h2>
+            <p class="text-slate-300 text-sm mt-2 max-w-2xl leading-relaxed">
+              No local installation required! This is a complete browser ecosystem designed to teach containers from the ground up. Model standard DevOps tasks: write Dockerfiles, build cache-optimized layers, orchestrate bridges, and map persistent host storage.
+            </p>
+            <div class="mt-5 flex flex-wrap gap-3">
+              <button (click)="activeTab.set('images')" class="bg-[#2496ed] hover:bg-[#1a85d7] text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-lg shadow-blue-500/10">
+                <mat-icon class="text-sm">code</mat-icon>
+                Build custom image
+              </button>
+              <button (click)="activeTab.set('copilot')" class="bg-purple-600/20 text-purple-200 border border-purple-500/30 hover:bg-purple-600/30 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer">
+                <mat-icon class="text-sm">psychology</mat-icon>
+                Consult AI Assistant
+              </button>
+            </div>
+          </div>
+
+          <!-- Sandbox Stat Indicators -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-[#0b1323] p-4 rounded-xl border border-slate-800/80 flex items-center gap-4">
+              <div class="p-3 bg-blue-500/10 text-blue-400 rounded-lg">
+                <mat-icon>layers</mat-icon>
+              </div>
+              <div>
+                <span class="text-slate-400 text-xs block">Active Containers</span>
+                <span class="text-xl font-bold text-white tracking-tight">{{ containers().length }} / 10 <span class="text-xs text-slate-500 font-normal">allocated</span></span>
+              </div>
+            </div>
+
+            <div class="bg-[#0b1323] p-4 rounded-xl border border-slate-800/80 flex items-center gap-4">
+              <div class="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                <mat-icon>filter_none</mat-icon>
+              </div>
+              <div>
+                <span class="text-slate-400 text-xs block">Local Images</span>
+                <span class="text-xl font-bold text-white tracking-tight">{{ images().length }} <span class="text-xs text-slate-500 font-normal">layers</span></span>
+              </div>
+            </div>
+
+            <div class="bg-[#0b1323] p-4 rounded-xl border border-slate-800/80 flex items-center gap-4">
+              <div class="p-3 bg-amber-500/10 text-amber-400 rounded-lg">
+                <mat-icon>folder</mat-icon>
+              </div>
+              <div>
+                <span class="text-slate-400 text-xs block">Mounted Volumes</span>
+                <span class="text-xl font-bold text-white tracking-tight">{{ volumes().length }} <span class="text-xs text-slate-500 font-normal">stores</span></span>
+              </div>
+            </div>
+
+            <div class="bg-[#0b1323] p-4 rounded-xl border border-slate-800/80 flex items-center gap-4">
+              <div class="p-3 bg-purple-500/10 text-purple-400 rounded-lg">
+                <mat-icon>lan</mat-icon>
+              </div>
+              <div>
+                <span class="text-slate-400 text-xs block">Isolated Networks</span>
+                <span class="text-xl font-bold text-white tracking-tight">{{ networks().length }} <span class="text-xs text-slate-500 font-normal">subnets</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            
+            <!-- Quick Tutorial Lab Guidelines -->
+            <div class="lg:col-span-3 bg-[#0a1221] p-5 rounded-xl border border-slate-850 space-y-4">
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <mat-icon class="text-blue-400">school</mat-icon>
+                Interactive Learning Roadmap Syllabus
+              </h3>
+              
+              <div class="space-y-3.5 pt-1">
+                <div class="flex gap-3">
+                  <div class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center font-mono text-xs font-bold border border-blue-500/20">1</div>
+                  <div>
+                    <h4 class="text-xs font-semibold text-white">Create & Pull Official Base Images</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed mt-0.5">
+                      Explore the built-in images directory or type <code class="text-pink-400 font-mono text-[10px]">redis:alpine</code> in the registry downloader tool to pull extra layers.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex gap-3">
+                  <div class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center font-mono text-xs font-bold border border-blue-500/20">2</div>
+                  <div>
+                    <h4 class="text-xs font-semibold text-white">Spin Up Containers with Volumes Mapping</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed mt-0.5">
+                      Launces a simulated container. Mount volume <code class="text-blue-400 font-mono text-[10px]">database-records</code> at container path <code class="text-blue-400 font-mono text-[10px]">/data</code> to ensure edits are retained during lifecycles.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex gap-3">
+                  <div class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center font-mono text-xs font-bold border border-blue-500/20">3</div>
+                  <div>
+                    <h4 class="text-xs font-semibold text-white">Enter the Bash CLI Terminal Shell</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed mt-0.5">
+                      Open container shell terminals. Run commands like <code class="text-emerald-400 font-mono text-[10px]">ls</code>, <code class="text-emerald-400 font-mono text-[10px]">cat package.json</code>, and use <code class="text-emerald-400 font-mono text-[10px]">ping</code> or <code class="text-emerald-400 font-mono text-[10px]">curl</code> to query sibling containers.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex gap-3">
+                  <div class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center font-mono text-xs font-bold border border-blue-500/20">4</div>
+                  <div>
+                    <h4 class="text-xs font-semibold text-white">Test Network Intercommunication</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed mt-0.5">
+                      Create container endpoints inside custom bridge networks. Test secure fetch connections using internal container DNS names and watch mock responses propagate.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Run Panel Launcher -->
+            <div class="lg:col-span-2 bg-[#09101d] p-5 rounded-xl border border-slate-850 flex flex-col justify-between">
+              <div class="space-y-3">
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                  <mat-icon class="text-emerald-400">rocket_launch</mat-icon>
+                  Quick Setup Launcher
+                </h3>
+                <p class="text-xs text-slate-400">Provide variables below to immediately spin up standard containers in the default network:</p>
+                
+                <div class="space-y-2.5 pt-1">
+                  <div>
+                    <span class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Target Base Image:</span>
+                    <div class="grid grid-cols-2 gap-2">
+                      <button (click)="launchForm.patchValue({ image: 'img-nginx-alpine', name: 'my-nginx-http', hostPort: 8080 })" class="bg-[#111c30] hover:bg-[#16253e] text-left p-2 rounded border border-slate-800 flex items-center gap-2 cursor-pointer">
+                        <mat-icon class="text-xs font-bold text-sky-400">dns</mat-icon>
+                        <div class="truncate">
+                          <span class="text-[10px] block text-white font-medium">Nginx Web</span>
+                          <span class="text-[9px] text-slate-400">nginx:alpine</span>
+                        </div>
+                      </button>
+                      <button (click)="launchForm.patchValue({ image: 'img-node-alpine', name: 'my-express-api', hostPort: 3000 })" class="bg-[#111c30] hover:bg-[#16253e] text-left p-2 rounded border border-slate-800 flex items-center gap-2 cursor-pointer">
+                        <mat-icon class="text-xs font-bold text-emerald-400">code</mat-icon>
+                        <div class="truncate">
+                          <span class="text-[10px] block text-white font-medium">Express App</span>
+                          <span class="text-[9px] text-slate-400">node:18-alpine</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Host Publish Port:</span>
+                    <div class="grid grid-cols-3 gap-2">
+                      <button (click)="launchForm.patchValue({ hostPort: 8080 })" class="bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs px-2 py-1.5 rounded text-center duration-150 cursor-pointer">8080</button>
+                      <button (click)="launchForm.patchValue({ hostPort: 3000 })" class="bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs px-2 py-1.5 rounded text-center duration-150 cursor-pointer">3000</button>
+                      <button (click)="launchForm.patchValue({ hostPort: 5432 })" class="bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs px-2 py-1.5 rounded text-center duration-150 cursor-pointer">5432</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-4 border-t border-slate-800/80 mt-4">
+                <button (click)="activeTab.set('images')" class="w-full bg-[#2496ed] hover:bg-[#158ad9] py-2 rounded-lg text-xs font-semibold text-center leading-normal cursor-pointer duration-200 shadow-md">
+                  Launch via Advanced Panel →
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      }
+
+      <!-- TAB 2: CONTAINERS MANAGER VIEW -->
+      @if (activeTab() === 'containers') {
+        <div class="space-y-6">
+          
+          <!-- Launch Config Panel Container Form -->
+          <div class="bg-[#0b1323] p-5 rounded-xl border border-slate-800">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-4">
+              <mat-icon class="text-[#2496ed]">add_circle</mat-icon>
+              Deploy New Container Sandbox
+            </h3>
+
+            <!-- Launch Forms -->
+            <form [formGroup]="launchForm" (ngSubmit)="launchContainer()" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-medium">
+              
+              <div>
+                <span class="block text-slate-400 font-bold tracking-wide uppercase text-[9px] mb-1.5">Container Alias Name:</span>
+                <input formControlName="name" placeholder="e.g., node-web-api" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white placeholder-slate-550 focus:outline-none focus:border-blue-500 text-xs">
+                @if (launchForm.get('name')?.touched && launchForm.get('name')?.invalid) {
+                  <span class="text-rose-500 text-[10px] mt-1 block">Alias is required (alphanumeric, max 16 chars).</span>
+                }
+              </div>
+
+              <div>
+                <span class="block text-slate-400 font-bold tracking-wide uppercase text-[9px] mb-1.5">Select Image Registry Template:</span>
+                <select formControlName="image" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs">
+                  @for (img of images(); track img.id) {
+                    <option [value]="img.id">{{ img.tag }} ({{ img.size }})</option>
+                  }
+                </select>
+              </div>
+
+              <div>
+                <span class="block text-slate-400 font-bold tracking-wide uppercase text-[9px] mb-1.5">Bridge Subnet Network Mapping:</span>
+                <select formControlName="network" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs">
+                  @for (net of networks(); track net.id) {
+                    <option [value]="net.name">{{ net.name }} network ({{ net.subnet || 'host limits' }})</option>
+                  }
+                </select>
+              </div>
+
+              <div>
+                <span class="block text-slate-400 font-bold tracking-wide uppercase text-[9px] mb-1.5">Exposed Host Port Publish:</span>
+                <input type="number" formControlName="hostPort" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs">
+                <span class="text-[9px] text-slate-500 block mt-1">Configures Port translation (Host Port -> Image Expose)</span>
+              </div>
+
+              <div>
+                <span class="block text-slate-400 font-bold tracking-wide uppercase text-[9px] mb-1.5">Mount Persistent Volume (Optional):</span>
+                <select formControlName="volumeName" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs">
+                  <option value="">-- No Persistence Volume mounted --</option>
+                  @for (vol of volumes(); track vol.name) {
+                    <option [value]="vol.name">{{ vol.name }} (volume)</option>
+                  }
+                </select>
+              </div>
+
+              <div>
+                <span class="block text-slate-400 font-bold tracking-wide uppercase text-[9px] mb-1.5">Volume Mount Path (e.g., /app/data):</span>
+                <input formControlName="volumeMountPath" placeholder="e.g., /var/lib/postgresql/data" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white placeholder-slate-550 focus:outline-none focus:border-blue-500 text-xs">
+              </div>
+
+              <div class="md:col-span-3 flex justify-end pt-2 border-t border-slate-800/60 mt-2">
+                <button type="submit" [disabled]="launchForm.invalid" class="bg-[#2496ed] hover:bg-[#1083dc] disabled:bg-slate-750 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold text-xs py-2 px-5 rounded-lg flex items-center gap-2 transition cursor-pointer">
+                  <mat-icon class="text-sm">play_arrow</mat-icon>
+                  Instantiate Container Environment
+                </button>
+              </div>
+
+            </form>
+          </div>
+
+          <!-- Sandbox Instances Grid -->
+          <div class="space-y-4">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <mat-icon class="text-[#2496ed]">format_list_bulleted</mat-icon>
+              Active Containers ({{ containers().length }})
+            </h3>
+
+            @if (containers().length === 0) {
+              <div class="bg-slate-900/40 border border-slate-800/80 p-10 rounded-xl text-center">
+                <mat-icon class="text-4xl text-slate-600">layers_clear</mat-icon>
+                <h4 class="text-sm font-semibold text-slate-300 mt-2">No Active Container Sandboxes</h4>
+                <p class="text-xs text-slate-500 mt-1">Select an Image from the dropdown above and click Deploy to boot one up!</p>
+              </div>
+            } @else {
+              <div class="grid grid-cols-1 gap-4">
+                @for (c of containers(); track c.id) {
+                  <div class="bg-[#0b1323] border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col md:flex-row justify-between gap-5 transition hover:border-slate-700">
+                    
+                    <!-- Container Metadata -->
+                    <div class="space-y-3 flex-1">
+                      <div class="flex items-center gap-2.5">
+                        <span class="w-3 h-3 rounded-full flex-shrink-0"
+                          [class.bg-emerald-500]="c.status === 'running'"
+                          [class.bg-rose-500]="c.status === 'stopped'"
+                          [class.animate-pulse]="c.status === 'running'">
+                        </span>
+                        <div>
+                          <h4 class="font-bold text-white text-sm flex items-center gap-2">
+                            {{ c.name }}
+                            <span class="font-mono text-[10px] text-slate-500 font-normal">ID: {{ c.id.substring(0, 8) }}</span>
+                          </h4>
+                          <span class="text-xs text-slate-400 flex items-center gap-1 font-semibold mt-0.5">
+                            <span class="text-[#2496ed] text-[11px] font-mono">{{ c.imageTag }}</span>
+                            <span class="text-slate-600">•</span>
+                            <span>IP Address:</span> <code class="text-amber-400 font-mono text-[11px]">{{ c.ipAddress }}</code>
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Subnets and Volumes mounts details -->
+                      <div class="flex flex-wrap gap-2 text-[10px] text-slate-300">
+                        <span class="bg-slate-900 border border-slate-850 px-2 py-0.5 rounded flex items-center gap-1.5">
+                          <mat-icon class="text-[11px] text-[#2496ed]">lan</mat-icon>
+                          Net: {{ c.network }}
+                        </span>
+                        
+                        @for (m of c.volumes; track m.volumeName) {
+                          <span class="bg-amber-500/10 border border-amber-500/20 text-amber-300 px-2 py-0.5 rounded flex items-center gap-1.5">
+                            <mat-icon class="text-[11px] text-amber-400">folder</mat-icon>
+                            Vol: {{ m.volumeName }} Map: {{ m.containerPath }}
+                          </span>
+                        } @empty {
+                          <span class="bg-slate-900 border border-slate-850 text-slate-500 px-2 py-0.5 rounded">
+                            No persistent volumes attached
+                          </span>
+                        }
+                      </div>
+
+                      <!-- Published Host Port map connection helper -->
+                      <div class="pt-1.5">
+                        <span class="text-[10px] font-bold tracking-wider text-slate-400 block mb-1">PUBLISHED PORTS TRANSLATION:</span>
+                        @for (hostP of Object.keys(c.ports); track hostP) {
+                          <div class="inline-flex items-center gap-2 bg-[#101b2f] p-1.5 rounded-lg border border-slate-800">
+                            <span class="font-mono text-xs text-blue-400">Host :{{ hostP }}</span>
+                            <mat-icon class="text-[11px] text-slate-600">arrow_forward</mat-icon>
+                            <span class="font-mono text-xs text-emerald-400">Container :{{ c.ports[+hostP] }}</span>
+                            
+                            @if (c.status === 'running') {
+                              <button (click)="launchLocalBrowser(c, +hostP)" class="ml-2 bg-[#2496ed]/15 hover:bg-[#2496ed]/30 text-[#2496ed] hover:text-white text-[10px] font-semibold px-2 py-0.5 rounded flex items-center gap-1 transition cursor-pointer">
+                                <mat-icon class="text-[11px]">open_in_new</mat-icon>
+                                Open Web View
+                              </button>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </div>
+
+                    <!-- Sandbox Real-time Fluctuating Graphs Metrics -->
+                    <div class="flex flex-col md:w-56 justify-between border-l md:border-l border-slate-800/50 md:pl-5 pt-3 md:pt-0 gap-3">
+                      <div>
+                        <span class="text-[10px] tracking-wider text-slate-550 font-bold block mb-1.5 uppercase">Performance Stat Indicators</span>
+                        
+                        <!-- CPU Progress bar -->
+                        <div class="space-y-1">
+                          <div class="flex items-center justify-between text-[10px] font-mono">
+                            <span class="text-slate-400">CPU:</span>
+                            <span class="text-emerald-400 font-semibold">{{ c.stats.cpu }}%</span>
+                          </div>
+                          <div class="w-full bg-slate-850 h-1.5 rounded-full overflow-hidden">
+                            <div class="bg-emerald-500 h-full duration-1000 transition-all" [style.width.%]="c.stats.cpu * 1.5"></div>
+                          </div>
+                        </div>
+
+                        <!-- Memory Progress bar -->
+                        <div class="space-y-1 mt-2.5">
+                          <div class="flex items-center justify-between text-[10px] font-mono">
+                            <span class="text-slate-400">Memory:</span>
+                            <span class="text-blue-400 font-semibold">{{ c.stats.memory }}MB / {{ c.stats.memoryLimit }}MB</span>
+                          </div>
+                          <div class="w-full bg-slate-850 h-1.5 rounded-full overflow-hidden">
+                            <div class="bg-blue-400 h-full duration-1000 transition-all" [style.width.%]="(c.stats.memory / c.stats.memoryLimit) * 100"></div>
+                          </div>
+                        </div>
+
+                        <!-- Resource Net IO Accumulator footer -->
+                        <div class="flex items-center justify-between mt-3 text-[9px] text-slate-500 font-mono">
+                          <span>Net In: {{ c.stats.netIn }} MB</span>
+                          <span>Net Out: {{ c.stats.netOut }} MB</span>
+                        </div>
+                      </div>
+
+                      <!-- Control Sandbox Triggers actions -->
+                      <div class="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/60 font-medium">
+                        <div class="flex gap-1.5">
+                          <button (click)="toggleContainer(c.id)"
+                            class="p-1.5 rounded-lg text-xs font-semibold duration-150 cursor-pointer flex items-center justify-center border border-slate-800"
+                            [class.text-amber-400]="c.status === 'running'"
+                            [class.bg-amber-400/5]="c.status === 'running'"
+                            [class.hover:bg-amber-400/20]="c.status === 'running'"
+                            [class.text-emerald-400]="c.status !== 'running'"
+                            [class.bg-emerald-400/5]="c.status !== 'running'"
+                            [class.hover:bg-emerald-400/20]="c.status !== 'running'"
+                            title="Start/Stop Container">
+                            <mat-icon class="text-sm">{{ c.status === 'running' ? 'pause' : 'play_arrow' }}</mat-icon>
+                          </button>
+
+                          <button (click)="restartContainer(c.id)" [disabled]="c.status !== 'running'" class="border border-slate-800 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed p-1.5 rounded-lg text-slate-300 hover:text-white cursor-pointer" title="Restart Sandbox Instance">
+                            <mat-icon class="text-sm">replay</mat-icon>
+                          </button>
+
+                          <button (click)="deleteContainer(c.id)" class="border border-red-500/10 bg-red-500/5 hover:bg-red-500/20 p-1.5 rounded-lg text-red-400 cursor-pointer" title="Delete Sandbox Node">
+                            <mat-icon class="text-sm">delete</mat-icon>
+                          </button>
+                        </div>
+
+                        <!-- Exec shell console overlays and system logs -->
+                        <div class="flex gap-1.5">
+                          <button (click)="openLogsPanel(c)" class="p-1.5 text-xs text-sky-450 hover:text-white bg-slate-900 duration-150 rounded border border-slate-850 font-semibold cursor-pointer">
+                            Logs
+                          </button>
+                          <button (click)="openTerminal(c)" [disabled]="c.status !== 'running'" class="disabled:opacity-45 disabled:cursor-not-allowed px-2 py-1 bg-[#101c31] hover:bg-[#1a2d4b] text-[#2496ed] hover:text-white text-xs font-bold rounded duration-150 border border-blue-500/20 cursor-pointer flex items-center gap-1">
+                            <mat-icon class="text-xs">terminal</mat-icon>
+                            CLI Terminal
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- TAB 3: DOCKERFILE & IMAGES BUILD ENGINE -->
+      @if (activeTab() === 'images') {
+        <div class="space-y-6">
+          
+          <!-- Image build engine console wrapper -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left inputs (Dockerfile code editor) -->
+            <div class="lg:col-span-7 space-y-4">
+              <div class="bg-[#0b1323] rounded-xl border border-slate-800 p-5 space-y-4 shadow-lg">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div class="flex items-center gap-2">
+                    <mat-icon class="text-[#2496ed]">description</mat-icon>
+                    <div>
+                      <h3 class="text-sm font-bold text-white">Advanced Dockerfile Workbench</h3>
+                      <p class="text-[11px] text-slate-400">Write instructions, lint syntax errors, and model OCI image layers</p>
+                    </div>
+                  </div>
+                  
+                  <!-- Boilerplates selection -->
+                  <div class="flex items-center gap-2 bg-[#111e34] p-1 rounded-lg border border-slate-800 self-start md:self-auto">
+                    <button (click)="selectedTemplate.set('node')" [class.bg-[#2496ed]]="selectedTemplate() === 'node'" [class.text-white]="selectedTemplate() === 'node'" class="px-2 py-1 text-[10px] rounded font-semibold text-slate-400 hover:text-white transition duration-200 cursor-pointer">NodeJS</button>
+                    <button (click)="selectedTemplate.set('nginx')" [class.bg-[#2496ed]]="selectedTemplate() === 'nginx'" [class.text-white]="selectedTemplate() === 'nginx'" class="px-2 py-1 text-[10px] rounded font-semibold text-slate-400 hover:text-white transition duration-200 cursor-pointer">Nginx</button>
+                    <button (click)="selectedTemplate.set('postgres')" [class.bg-[#2496ed]]="selectedTemplate() === 'postgres'" [class.text-white]="selectedTemplate() === 'postgres'" class="px-2 py-1 text-[10px] rounded font-semibold text-slate-400 hover:text-white transition duration-200 cursor-pointer">Postgres</button>
+                    <button (click)="selectedTemplate.set('python')" [class.bg-[#2496ed]]="selectedTemplate() === 'python'" [class.text-white]="selectedTemplate() === 'python'" class="px-2 py-1 text-[10px] rounded font-semibold text-slate-400 hover:text-white transition duration-200 cursor-pointer">Python</button>
+                  </div>
+                </div>
+
+                <!-- Editor Sub-Tabs Toolbar -->
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div class="flex gap-2 text-xs">
+                    <button (click)="editorSubTab.set('edit')" [class.text-blue-400]="editorSubTab() === 'edit'" [class.border-blue-400]="editorSubTab() === 'edit'" class="px-3 py-1 font-medium border-b-2 border-transparent hover:text-white pb-2 duration-150 cursor-pointer">
+                      ✍️ Live Code Editor
+                    </button>
+                    <button (click)="editorSubTab.set('preview')" [class.text-emerald-400]="editorSubTab() === 'preview'" [class.border-emerald-400]="editorSubTab() === 'preview'" class="px-3 py-1 font-medium border-b-2 border-transparent hover:text-white pb-2 duration-150 cursor-pointer flex items-center gap-1.5">
+                      ✨ Styled Highlights <span class="bg-emerald-500/10 text-emerald-400 px-1 rounded text-[9px]">Live</span>
+                    </button>
+                  </div>
+                  <div class="text-[10px] bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 font-mono text-slate-400 flex items-center gap-1">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    IDE Linter Active
+                  </div>
+                </div>
+
+                <!-- Live Editor view -->
+                @if (editorSubTab() === 'edit') {
+                  <div class="relative rounded-lg border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-900 px-4 py-2 flex items-center justify-between text-[10px] text-slate-400 font-mono tracking-wider border-b border-slate-800">
+                      <span>Dockerfile Source Code</span>
+                      <span class="text-blue-400 font-medium">Syntax verification compiled</span>
+                    </div>
+                    <textarea [value]="dockerfileInput()" (input)="dockerfileInput.set($any($event.target).value)"
+                      class="w-full bg-[#050b15] text-[#38bdf8] font-mono text-xs p-4 focus:outline-none min-h-[280px] leading-relaxed resize-y">
+                    </textarea>
+                  </div>
+                }
+
+                <!-- Styled Highlight preview -->
+                @if (editorSubTab() === 'preview') {
+                  <div class="relative rounded-lg border border-slate-800 overflow-hidden">
+                    <div class="bg-slate-900 px-4 py-2 flex items-center justify-between text-[10px] text-slate-400 font-mono tracking-wider border-b border-slate-800">
+                      <span>Syntax Highlighted Source</span>
+                      <span class="text-slate-450 font-medium">Ready for deployment</span>
+                    </div>
+                    <pre class="w-full bg-[#030712] p-4 min-h-[280px] text-xs font-mono overflow-auto leading-relaxed border-none rounded-none text-slate-350 select-text whitespace-pre" [innerHTML]="highlightDockerfile(dockerfileInput())"></pre>
+                  </div>
+                }
+
+                <!-- REAL-TIME LINTER DIAGNOSTICS BOARD -->
+                <div class="bg-slate-950/40 border border-slate-850 rounded-xl p-4 space-y-3.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <mat-icon class="text-amber-500 text-sm">security_update_warning</mat-icon>
+                      Real-time Linter Diagnostics ({{ dockerfileErrors().length }} items found)
+                    </span>
+                    @if (dockerfileErrors().length === 0) {
+                      <span class="text-[10px] font-mono font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/25 flex items-center gap-1">
+                        🚀 0 problems detected
+                      </span>
+                    } @else {
+                      <span class="text-[10px] font-mono font-medium text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/25">
+                        ⚠️ Fix issues before building
+                      </span>
+                    }
+                  </div>
+
+                  @if (dockerfileErrors().length === 0) {
+                    <div class="bg-[#050b15] rounded-lg p-3 text-center border border-slate-850">
+                      <span class="text-xs text-slate-400 block">Dockerfile looks pristine! No syntax faults or anti-patterns detected. 🎉</span>
+                    </div>
+                  } @else {
+                    <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      @for (err of dockerfileErrors(); track err.line + err.type) {
+                        <div class="bg-[#111e34]/70 border border-slate-800/80 rounded-lg p-3 flex flex-col md:flex-row md:items-start md:justify-between gap-3 text-xs duration-150 hover:bg-[#111e34]">
+                          <div class="flex items-start gap-2.5">
+                            <span class="px-2 py-0.5 rounded font-mono font-bold text-[10px]"
+                              [class.bg-rose-500/15]="err.severity === 'error'"
+                              [class.text-rose-400]="err.severity === 'error'"
+                              [class.bg-amber-500/15]="err.severity === 'warning'"
+                              [class.text-amber-400]="err.severity === 'warning'">
+                              Line {{ err.line }}
+                            </span>
+                            <div>
+                              <div class="font-bold font-mono tracking-tight text-white mb-0.5">
+                                [{{ err.instruction }}] {{ err.message }}
+                              </div>
+                              <div class="text-[11px] text-slate-400 leading-relaxed font-sans">
+                                Tip: {{ err.tip }}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <!-- Quick Fix Action buttons -->
+                          <button (click)="applyQuickFix(err)" class="self-end md:self-start bg-blue-600/15 text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-[10px] font-bold py-1 px-2.5 rounded-md duration-200 cursor-pointer flex items-center gap-1 select-none">
+                            <mat-icon class="text-[12px] h-3 w-3">auto_fix_high</mat-icon>
+                            Quick Fix
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+
+                <!-- Run Build triggers -->
+                <div class="flex flex-col md:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-800/60 text-xs">
+                  <div class="w-full md:w-auto">
+                    <span class="block text-[10px] uppercase font-bold text-slate-400 mb-1">Package Name & Tag Output (Image Tag):</span>
+                    <input type="text" [formControl]="newImageTag" class="w-full md:w-64 bg-[#111e34] border border-slate-800 rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-500 font-mono leading-normal text-white">
+                  </div>
+                  <button (click)="simulateBuild()" [disabled]="isBuilding()" class="w-full md:w-auto bg-[#2496ed] hover:bg-[#1589da] disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold py-2.5 px-6 rounded-lg uppercase tracking-wider text-xs shadow-lg flex items-center justify-center gap-2 duration-250 cursor-pointer border border-transparent">
+                    @if (isBuilding()) {
+                      <mat-icon class="animate-spin text-sm">autorenew</mat-icon>
+                      Compiling Building Docker...
+                    } @else {
+                      <mat-icon class="text-sm">build</mat-icon>
+                      Execute Docker Build
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right block (Layer Composer Assembly & Build Compiler logs tabber) -->
+            <div class="lg:col-span-5 bg-[#040810] border border-slate-800 rounded-xl p-5 shadow-inner flex flex-col justify-between space-y-4">
+              
+              <!-- Tab selection for workspace tools -->
+              <div class="flex items-center gap-1.5 bg-[#0b1323] p-1 rounded-lg border border-slate-800">
+                <button (click)="rightPaneSubTab.set('layers')" [class.bg-slate-900]="rightPaneSubTab() === 'layers'" [class.text-white]="rightPaneSubTab() === 'layers'" class="flex-1 text-center py-2 text-[11px] font-semibold text-slate-400 hover:text-white transition duration-200 cursor-pointer rounded flex items-center justify-center gap-1">
+                  <mat-icon class="text-sm">layers</mat-icon>
+                  Layer Assembly Stack
+                </button>
+                <button (click)="rightPaneSubTab.set('logs')" [class.bg-slate-900]="rightPaneSubTab() === 'logs'" [class.text-white]="rightPaneSubTab() === 'logs'" class="flex-1 text-center py-2 text-[11px] font-semibold text-slate-400 hover:text-white transition duration-200 cursor-pointer rounded flex items-center justify-center gap-1">
+                  <mat-icon class="text-sm">terminal</mat-icon>
+                  Compiler Logs Stream
+                </button>
+              </div>
+
+              <!-- Content Panel 1: Layer Assembly Stack -->
+              @if (rightPaneSubTab() === 'layers') {
+                <div class="flex-1 flex flex-col justify-between overflow-hidden space-y-4">
+                  <div class="space-y-2">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      📦 Visual Image Layers Stack (From bottom to top):
+                    </span>
+
+                    <div class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                      @for (layer of parsedDockerfile(); track $index) {
+                        @if (!layer.isEmpty && !layer.isComment) {
+                          <div class="bg-[#0b1323] border border-slate-800 rounded-lg p-3 text-xs space-y-2 duration-150 hover:border-slate-700/60 transition group relative">
+                            <div class="flex items-start justify-between gap-2">
+                              <div class="flex items-center gap-2">
+                                <!-- Command Type themed pills -->
+                                <span class="px-1.5 py-0.5 rounded font-mono font-black text-[9px] uppercase shadow-sm select-none"
+                                  [class.bg-sky-500/15]="layer.instruction.toUpperCase() === 'FROM'"
+                                  [class.text-sky-400]="layer.instruction.toUpperCase() === 'FROM'"
+                                  [class.bg-amber-500/15]="layer.instruction.toUpperCase() === 'RUN'"
+                                  [class.text-amber-400]="layer.instruction.toUpperCase() === 'RUN'"
+                                  [class.bg-emerald-500/15]="layer.instruction.toUpperCase() === 'COPY'"
+                                  [class.text-emerald-400]="layer.instruction.toUpperCase() === 'COPY'"
+                                  [class.bg-purple-500/15]="layer.instruction.toUpperCase() === 'EXPOSE'"
+                                  [class.text-purple-400]="layer.instruction.toUpperCase() === 'EXPOSE'"
+                                  [class.bg-blue-500/15]="layer.instruction.toUpperCase() === 'WORKDIR'"
+                                  [class.text-blue-400]="layer.instruction.toUpperCase() === 'WORKDIR'"
+                                  [class.bg-pink-500/15]="layer.instruction.toUpperCase() === 'ENV'"
+                                  [class.text-pink-400]="layer.instruction.toUpperCase() === 'ENV'"
+                                  [class.bg-indigo-500/15]="['CMD', 'ENTRYPOINT'].includes(layer.instruction.toUpperCase())"
+                                  [class.text-indigo-400]="['CMD', 'ENTRYPOINT'].includes(layer.instruction.toUpperCase())"
+                                  [class.bg-slate-500/15]="!['FROM', 'RUN', 'COPY', 'EXPOSE', 'WORKDIR', 'ENV', 'CMD', 'ENTRYPOINT'].includes(layer.instruction.toUpperCase())"
+                                  [class.text-slate-400]="!['FROM', 'RUN', 'COPY', 'EXPOSE', 'WORKDIR', 'ENV', 'CMD', 'ENTRYPOINT'].includes(layer.instruction.toUpperCase())">
+                                  {{ layer.instruction }}
+                                </span>
+                                
+                                <!-- Metadata help explanation -->
+                                <span class="text-[9px] text-slate-500 italic uppercase">
+                                  @if (layer.instruction.toUpperCase() === 'FROM') { base os layer }
+                                  @if (layer.instruction.toUpperCase() === 'WORKDIR') { set dynamic context }
+                                  @if (layer.instruction.toUpperCase() === 'RUN') { executor layer }
+                                  @if (layer.instruction.toUpperCase() === 'COPY') { import workspace }
+                                  @if (layer.instruction.toUpperCase() === 'ENV') { system variables }
+                                  @if (layer.instruction.toUpperCase() === 'EXPOSE') { port mapping config }
+                                  @if (['CMD', 'ENTRYPOINT'].includes(layer.instruction.toUpperCase())) { main entry point }
+                                </span>
+                              </div>
+
+                              <!-- Swap / delete layers controls -->
+                              <div class="flex items-center gap-1">
+                                <button (click)="moveLayer($index, 'up')" [disabled]="$first" title="Move layer down the order (closer to base image)" class="p-0.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded disabled:text-slate-800 disabled:bg-transparent duration-150 cursor-pointer">
+                                  <mat-icon class="text-xs h-4 w-4">arrow_upward</mat-icon>
+                                </button>
+                                <button (click)="moveLayer($index, 'down')" [disabled]="$last" title="Move layer up the order" class="p-0.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded disabled:text-slate-800 disabled:bg-transparent duration-150 cursor-pointer">
+                                  <mat-icon class="text-xs h-4 w-4">arrow_downward</mat-icon>
+                                </button>
+                                <button (click)="deleteLayer($index)" title="Remove layer instruction" class="p-0.5 text-rose-500/80 hover:text-rose-400 hover:bg-rose-500/10 rounded duration-150 cursor-pointer">
+                                  <mat-icon class="text-xs h-4 w-4">delete_outline</mat-icon>
+                                </button>
+                              </div>
+                            </div>
+
+                            <!-- Layer args visual editable detail -->
+                            @if (editingLayerIdx() === $index) {
+                              <div class="flex items-center gap-2 pt-1">
+                                <input type="text" [formControl]="editingLayerValue" class="flex-1 bg-[#111e34] border border-slate-800 rounded px-2 py-1 text-xs text-white uppercase font-mono max-w-[200px]">
+                                <button (click)="saveLayerEdit($index, layer.instruction)" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1 rounded duration-150 cursor-pointer">
+                                  <mat-icon class="text-[12px] h-4.5 w-4.5 leading-none">check</mat-icon>
+                                </button>
+                                <button (click)="editingLayerIdx.set(null)" class="bg-slate-800 hover:bg-slate-700 text-slate-400 p-1 rounded duration-150 cursor-pointer">
+                                  <mat-icon class="text-[12px] h-4.5 w-4.5 leading-none">close</mat-icon>
+                                </button>
+                              </div>
+                            } @else {
+                              <div class="flex items-baseline justify-between select-text pt-1">
+                                <div class="font-mono text-slate-350 tracking-tight break-all">
+                                  {{ layer.arguments }}
+                                </div>
+                                <button (click)="startEditLayer($index, layer.arguments)" class="p-0.5 text-slate-500 opacity-0 group-hover:opacity-100 hover:text-blue-400 rounded duration-150 cursor-pointer" title="Edit instruction layer inline">
+                                  <mat-icon class="text-xs h-3.5 w-3.5">edit</mat-icon>
+                                </button>
+                              </div>
+                            }
+
+                            <!-- Size estimation line tag info -->
+                            <div class="border-t border-slate-850 pt-1.5 mt-1 flex items-center justify-between text-[9px] text-slate-500 font-mono select-none">
+                              <span>Sublayer ID: lf-{{ 100 + $index }}</span>
+                              <span class="text-emerald-500">
+                                @if (layer.instruction.toUpperCase() === 'FROM') { +122.1 MB (shared cache) }
+                                @if (layer.instruction.toUpperCase() === 'RUN') { +18.4 MB file change }
+                                @if (layer.instruction.toUpperCase() === 'COPY') { +4.2 MB files }
+                                @if (['ENV', 'EXPOSE', 'WORKDIR', 'CMD', 'ENTRYPOINT'].includes(layer.instruction.toUpperCase())) { +0 B metadata }
+                              </span>
+                            </div>
+                          </div>
+                        }
+                      }
+                    </div>
+                  </div>
+
+                  <!-- Visual Build Toolkit Tool box to instantly add new layers -->
+                  <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-850 space-y-2">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 select-none">
+                      <mat-icon class="text-blue-400 text-xs">add_box</mat-icon>
+                      Interactive Build Toolkit (Add Layer)
+                    </span>
+                    <div class="flex flex-wrap gap-1.5">
+                      <button (click)="addNewLayer('FROM')" class="bg-slate-900 border border-slate-800 text-sky-400 text-[10px] font-bold font-mono px-2 py-1 rounded hover:bg-sky-500/10 cursor-pointer duration-150">
+                        + FROM
+                      </button>
+                      <button (click)="addNewLayer('RUN')" class="bg-slate-900 border border-slate-800 text-amber-450 text-[10px] font-bold font-mono px-2 py-1 rounded hover:bg-amber-500/10 cursor-pointer duration-150">
+                        + RUN
+                      </button>
+                      <button (click)="addNewLayer('COPY')" class="bg-slate-900 border border-slate-800 text-emerald-450 text-[10px] font-bold font-mono px-2 py-1 rounded hover:bg-emerald-500/10 cursor-pointer duration-150">
+                        + COPY
+                      </button>
+                      <button (click)="addNewLayer('WORKDIR')" class="bg-slate-900 border border-slate-800 text-blue-450 text-[10px] font-bold font-mono px-2 py-1 rounded hover:bg-blue-500/10 cursor-pointer duration-150">
+                        + WORKDIR
+                      </button>
+                      <button (click)="addNewLayer('ENV')" class="bg-slate-900 border border-slate-800 text-pink-450 text-[10px] font-bold font-mono px-2 py-1 rounded hover:bg-pink-500/10 cursor-pointer duration-150">
+                        + ENV
+                      </button>
+                      <button (click)="addNewLayer('EXPOSE')" class="bg-slate-900 border border-slate-800 text-purple-450 text-[10px] font-bold font-mono px-2 py-1 rounded hover:bg-purple-500/10 cursor-pointer duration-150">
+                        + EXPOSE
+                      </button>
+                      <button (click)="addNewLayer('CMD')" class="bg-slate-900 border border-slate-800 text-indigo-400 text-[10px] font-bold font-mono px-2 py-1 rounded hover:bg-indigo-500/10 cursor-pointer duration-150">
+                        + CMD
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+
+              <!-- Content Panel 2: Build Compiler logs panel -->
+              @if (rightPaneSubTab() === 'logs') {
+                <div class="flex-1 space-y-3 overflow-hidden flex flex-col justify-between">
+                  <span class="text-xs text-slate-400 font-bold block bg-slate-900/60 p-2 rounded border border-slate-850 tracking-wider">
+                    📟 BUILD PIPELINE COMPILER LOGS STREAM
+                  </span>
+                  
+                  <div class="flex-1 bg-black/40 font-mono text-[11px] p-3 rounded-lg border border-slate-900 leading-relaxed overflow-y-auto max-h-[280px]">
+                    @if (buildLogs().length === 0) {
+                      <span class="text-slate-500 italic block py-4 text-center">Engine waiting to parse instructions. Trigger Build sequence of Dockerfile on the left.</span>
+                    } @else {
+                      @for (line of buildLogs(); track $index) {
+                        <div class="block py-0.5"
+                          [class.text-emerald-400]="line.startsWith('🟢') || line.includes('Successfully')"
+                          [class.text-slate-350]="!line.startsWith('🟢') && !line.includes('Successfully')">
+                          {{ line }}
+                        </div>
+                      }
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Compile progress bar loader details -->
+              @if (isBuilding() || buildProgress() > 0) {
+                <div class="mt-4 pt-4 border-t border-slate-800/60 select-none">
+                  <div class="flex justify-between text-[10px] font-mono mb-1">
+                    <span class="text-slate-400">Assembling container filesystem layers...</span>
+                    <span class="text-emerald-400 font-bold">{{ buildProgress() }}%</span>
+                  </div>
+                  <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-850">
+                    <div class="bg-gradient-to-r from-blue-500 to-emerald-500 h-full duration-500 transition-all" [style.width.%]="buildProgress()"></div>
+                  </div>
+                </div>
+              }
+            </div>
+
+          </div>
+
+          <!-- EXCITING NEW FEATURE: DOCKER IMAGE BUILD LAYERS & CACHING STATUS -->
+          <div class="bg-[#0b1323] p-5 rounded-xl border border-slate-800 space-y-6 shadow-xl" id="docker-cache-tracker">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div class="flex items-center gap-3">
+                <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+                  <mat-icon>history_toggle_off</mat-icon>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    Build Layers Cache Optimizer Registry
+                    <span class="text-[10px] bg-emerald-500/10 text-emerald-400 font-medium px-2 py-0.5 rounded border border-cyan-500/20 tracking-wider">Active Analysis</span>
+                  </h3>
+                  <p class="text-xs text-slate-400">Evaluate layout structure validity and simulate standard OCI cached layers matching logic in real-time.</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button (click)="cacheService.clearCacheSimulationLedger()" class="bg-rose-600/10 text-rose-400 border border-rose-500/25 hover:bg-rose-600/20 text-xs px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer flex items-center gap-1">
+                  <mat-icon class="text-xs">delete_sweep</mat-icon>
+                  Reset Ledger Database
+                </button>
+              </div>
+            </div>
+
+            <!-- Pre-Build Analysis Dashboard & Metrics -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <!-- Global Stats Card 1 -->
+              <div class="bg-[#050b15] p-4 rounded-lg border border-slate-850 flex flex-col justify-between">
+                <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">Average Cache Hit Rate</span>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-2xl font-black text-emerald-400 font-mono tracking-tight">{{ cacheService.averageCacheHitRate() }}%</span>
+                  <span class="text-[10px] text-slate-400">efficiency</span>
+                </div>
+                <!-- Mini Progress Line -->
+                <div class="w-full bg-slate-905 h-1 rounded-full mt-3 overflow-hidden bg-slate-900">
+                  <div class="bg-emerald-400 h-full duration-500 transition-all shadow-[0_0_8px_rgba(52,211,153,0.5)]" [style.width.%]="cacheService.averageCacheHitRate()"></div>
+                </div>
+              </div>
+
+              <!-- Global Stats Card 2 -->
+              <div class="bg-[#050b15] p-4 rounded-lg border border-slate-850 flex flex-col justify-between">
+                <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">Shared Host Storage Saved</span>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-2xl font-black text-blue-400 font-mono tracking-tight">{{ cacheService.totalStorageSavedMb() }} MB</span>
+                  <span class="text-[10px] text-slate-400">transferred</span>
+                </div>
+                <div class="text-[9px] text-[#2496ed] font-medium mt-3 flex items-center gap-1">
+                  <mat-icon class="text-xs">check_circle</mat-icon> Avoids duplicate OCI layer storage writing
+                </div>
+              </div>
+
+              <!-- Global Stats Card 3 -->
+              <div class="bg-[#050b15] p-4 rounded-lg border border-slate-850 flex flex-col justify-between">
+                <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">Simulated Build-Time Saved</span>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-2xl font-black text-amber-500 font-mono tracking-tight">{{ cacheService.totalBuildTimeSavedSeconds() }}s</span>
+                  <span class="text-[10px] text-slate-400">overall</span>
+                </div>
+                <div class="text-[9px] text-amber-400 mt-3 flex items-center gap-1 font-medium font-bold">
+                  <mat-icon class="text-xs">bolt</mat-icon> Fast-tracked cached compilation steps
+                </div>
+              </div>
+
+              <!-- Global Stats Card 4 -->
+              <div class="bg-[#050b15] p-4 rounded-lg border border-slate-850 flex flex-col justify-between">
+                <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1">Processed Builds Logs</span>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-2xl font-black text-purple-400 font-mono tracking-tight">{{ cacheService.totalBuildsCount() }}</span>
+                  <span class="text-[10px] text-slate-400">images</span>
+                </div>
+                <div class="text-[9px] text-slate-400 mt-3 flex items-center gap-1 leading-normal font-sans">
+                  <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span> Layers matched sequentially
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+              
+              <!-- Left Layer Analyzer list block (Columns 7) -->
+              <div class="lg:col-span-7 space-y-3.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 select-none">
+                    <mat-icon class="text-emerald-500 text-xs font-bold">biotech</mat-icon>
+                    Live OCI Dockerfile Cache Match Evaluator
+                  </span>
+                  <span class="text-[9.5px] text-slate-500 italic block">Updates instantly as you edit code above</span>
+                </div>
+
+                <div class="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                  @for (layer of cacheService.evaluateDockerfileCache(dockerfileInput()); track $index) {
+                    <div class="border rounded-xl p-3 text-xs flex items-start gap-3 transition duration-150 relative overflow-hidden"
+                      [class.bg-[#07130b]]="layer.status === 'hit'"
+                      [class.bg-[#07111c]]="layer.status === 'hit'"
+                      [class.border-emerald-500/20]="layer.status === 'hit'"
+                      [class.bg-emerald-950/10]="layer.status === 'hit'"
+                      [class.bg-[#11131a]/80]="layer.status === 'miss'"
+                      [class.border-slate-850]="layer.status === 'miss'">
+                      
+                      <!-- Step Indicator block -->
+                      <div class="flex-shrink-0 w-8 h-8 rounded-lg flex flex-col items-center justify-center font-mono font-bold text-[10px] border border-solid"
+                        [class.bg-emerald-500/10]="layer.status === 'hit'"
+                        [class.text-emerald-400]="layer.status === 'hit'"
+                        [class.border-emerald-500/30]="layer.status === 'hit'"
+                        [class.bg-slate-900]="layer.status === 'miss'"
+                        [class.text-slate-400]="layer.status === 'miss'"
+                        [class.border-slate-800]="layer.status === 'miss'">
+                        <span class="text-[8px] font-sans font-normal leading-none uppercase text-slate-500">L</span>
+                        <span class="leading-none text-xs">{{ layer.lineNumber }}</span>
+                      </div>
+
+                      <div class="flex-1 space-y-1 sm:space-y-1.5 min-w-0">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 min-w-0">
+                          <code class="font-mono text-xs text-white truncate break-all block">
+                            <span class="text-pink-400 font-bold uppercase mr-1.5">{{ layer.instruction }}</span>
+                            <span class="text-slate-300">{{ layer.arguments }}</span>
+                          </code>
+                          
+                          <!-- Status badge -->
+                          <span class="self-start sm:self-auto px-2 py-0.5 rounded-full text-[9px] font-mono tracking-wider uppercase font-extrabold flex items-center gap-1 shadow-sm select-none"
+                            [class.bg-emerald-500/15]="layer.status === 'hit'"
+                            [class.text-emerald-400]="layer.status === 'hit'"
+                            [class.bg-amber-500/15]="layer.status === 'miss'"
+                            [class.text-amber-400]="layer.status === 'miss'">
+                            <span class="w-1.5 h-1.5 rounded-full" [class.bg-emerald-400]="layer.status === 'hit'" [class.bg-amber-400]="layer.status === 'miss'"></span>
+                            {{ layer.status === 'hit' ? 'CACHE HIT' : 'CACHE MISS' }}
+                          </span>
+                        </div>
+
+                        <!-- Sub-layer info -->
+                        <div class="flex flex-wrap items-center gap-3 text-[10px] font-mono text-slate-500">
+                          @if (layer.status === 'hit') {
+                            <span class="text-emerald-500 flex items-center gap-1 font-medium bg-emerald-500/5 px-1.5 py-px rounded border border-emerald-500/10">
+                              <mat-icon class="text-[11px] h-3 w-3">check_circle_outline</mat-icon>
+                              Skipped (+0s compile time)
+                            </span>
+                            <span class="truncate">Context: {{ layer.cachedFromImageTag || 'prebuilt-context' }}</span>
+                          } @else {
+                            <span class="text-amber-400 flex items-center gap-1 font-medium bg-amber-500/5 px-1.5 py-px rounded border border-amber-500/10">
+                              <mat-icon class="text-[11.5px] h-3.5 w-3.5">play_circle</mat-icon>
+                              Requires compile (+{{ layer.instruction === 'FROM' ? '8.0' : (layer.instruction === 'RUN' ? '4.5' : '1.5') }}s)
+                            </span>
+                            <span>Fresh layer rewrite</span>
+                          }
+                          <span class="truncate">Hash: {{ layer.hash }}</span>
+                        </div>
+                      </div>
+
+                    </div>
+                  } @empty {
+                    <div class="text-slate-505 italic text-center py-8 bg-[#050b15] border border-slate-850 rounded-xl space-y-2">
+                      <mat-icon class="text-slate-600 text-3xl">border_color</mat-icon>
+                      <p class="text-xs">No instruction layers parsed yet. Write a Dockerfile above to run active caching simulations.</p>
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <!-- Right Build Reports Ledger logs (Columns 5) -->
+              <div class="lg:col-span-5 space-y-3.5">
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 select-none text-left">
+                  <mat-icon class="text-purple-400 text-xs">dns</mat-icon>
+                  Historical Build Reports & Savings Ledger
+                </span>
+
+                <div class="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                  @for (rep of cacheService.buildReports(); track rep.id) {
+                    <div class="bg-[#050b15] border border-slate-850 rounded-xl p-3.5 space-y-3 hover:border-slate-800 transition text-left">
+                      <div class="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 class="font-bold text-slate-100 text-xs tracking-tight flex items-center gap-1.5">
+                            {{ rep.imageTag }}
+                          </h4>
+                          <span class="text-[9px] text-slate-500 font-mono mt-0.5 block">Report unique ID: {{ rep.id }}</span>
+                        </div>
+                        <span class="text-[9.5px] bg-[#111c30] text-emerald-400 font-mono px-2 py-0.5 rounded border border-emerald-500/10 font-bold select-none">
+                          {{ Math.round((rep.cachedLayersCount / rep.totalLayers) * 100) }}% Hit Rate
+                        </span>
+                      </div>
+
+                      <div class="border-t border-slate-900/60 pt-2.5 grid grid-cols-2 gap-2 text-[10px]">
+                        <div class="bg-slate-900/50 p-1.5 rounded border border-slate-850/40 text-left">
+                          <span class="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">Time Saved</span>
+                          <span class="font-mono text-amber-500 font-bold whitespace-nowrap">{{ rep.timeSavedSeconds }}s less build delay</span>
+                        </div>
+                        <div class="bg-slate-900/50 p-1.5 rounded border border-slate-850/40 text-left">
+                          <span class="text-slate-500 block text-[9px] uppercase font-bold tracking-wider mb-0.5">Size Reduced</span>
+                          <span class="font-mono text-blue-400 font-bold whitespace-nowrap">{{ rep.sizeSavedMb }} MB saved</span>
+                        </div>
+                      </div>
+
+                      <!-- Step dots preview -->
+                      <div class="pt-2 flex items-center gap-1.5 justify-start text-left">
+                        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider select-none">Layers:</span>
+                        <div class="flex gap-1.5">
+                          @for (layerStatus of rep.layers; track $index) {
+                            <span class="w-4 h-4 rounded flex items-center justify-center font-mono font-black text-[9px] text-white border border-solid select-none cursor-help"
+                              [title]="layerStatus.instruction + ' ' + layerStatus.arguments + ' (' + (layerStatus.status === 'hit' ? 'Cached' : 'Compiled') + ')'"
+                              [class.bg-emerald-500/20]="layerStatus.status === 'hit'"
+                              [class.text-emerald-400]="layerStatus.status === 'hit'"
+                              [class.border-emerald-500/40]="layerStatus.status === 'hit'"
+                              [class.bg-amber-600/15]="layerStatus.status === 'miss'"
+                              [class.text-amber-400]="layerStatus.status === 'miss'"
+                              [class.border-amber-500/20]="layerStatus.status === 'miss'">
+                              {{ layerStatus.instruction.charAt(0) }}
+                            </span>
+                          }
+                        </div>
+                      </div>
+
+                      <div class="text-[9px] text-slate-500 text-right pt-1 select-none">
+                        Executed {{ rep.timestamp | date:'short' }}
+                      </div>
+                    </div>
+                  } @empty {
+                    <div class="text-slate-500 italic text-center py-8 bg-[#050b15] border border-slate-850 rounded-xl">
+                      <p class="text-xs">No build records on record yet. Run a Docker Build to compile layers.</p>
+                    </div>
+                  }
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Pull official remote docker library hub image widget -->
+          <div class="bg-[#0b1323] p-5 rounded-xl border border-slate-800 space-y-4">
+            <div class="flex items-center gap-2">
+              <mat-icon class="text-yellow-500">cloud_download</mat-icon>
+              <div>
+                <h3 class="text-sm font-bold text-white">Pull Base Docker Images Hub</h3>
+                <p class="text-xs text-slate-400">Download clean environments from our virtual Docker library pool (e.g., redis:alpine, ubuntu:latest)</p>
+              </div>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-3 pt-1 uppercase text-xs">
+              <div class="flex-1">
+                <input type="text" [formControl]="pullImageName" placeholder="e.g., redis:alpine" class="w-full bg-[#111e34] border border-slate-800 rounded px-3 py-2 text-white placeholder-slate-550 font-mono">
+              </div>
+              <button (click)="pullOfficialImage()" [disabled]="isPulling()" class="bg-[#2496ed] hover:bg-[#1b84d2] disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold py-2 px-5 rounded duration-150 flex items-center justify-center gap-2 cursor-pointer border border-transparent">
+                <mat-icon class="text-sm">download</mat-icon>
+                Pull Hub Image
+              </button>
+            </div>
+
+            @if (pullLogs().length > 0) {
+              <div class="bg-black/20 p-3 rounded-lg border border-slate-900/60 font-mono text-[10px] leading-relaxed text-slate-300 max-h-40 overflow-y-auto">
+                @for (l of pullLogs(); track $index) {
+                  <div class="py-0.5" [class.text-emerald-400]="l.startsWith('🟢') || l.includes('Successfully')">
+                    {{ l }}
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- Grid panel of built or pre-warmed image repositories -->
+          <div class="space-y-4">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <mat-icon class="text-[#2496ed]">layers</mat-icon>
+              Built Images Directory Registry ({{ images().length }})
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              @for (img of images(); track img.id) {
+                <div class="bg-[#0b1323] border border-slate-800 rounded-xl p-4 space-y-3 relative overflow-hidden shadow-md">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <h4 class="font-bold text-white text-sm tracking-tight flex items-center gap-1.5">
+                        {{ img.tag }}
+                        @if (img.isPrebuilt) {
+                          <span class="text-[9px] bg-sky-500/10 text-sky-400 px-1 py-px rounded border border-sky-450/20 font-mono uppercase font-normal text-slate-100 font-semibold">Base</span>
+                        }
+                      </h4>
+                      <code class="text-[10px] text-slate-500 font-mono mt-0.5 block">Image ID: {{ img.id.replace('img-', '') }}</code>
+                    </div>
+                    <span class="text-xs bg-slate-900 text-slate-400 font-mono py-1 px-2.5 rounded border border-slate-850 font-semibold">
+                      {{ img.size }}
+                    </span>
+                  </div>
+
+                  <!-- Layers List Overview -->
+                  <div class="border-t border-slate-800/80 pt-2.5 space-y-1.5 text-[10px]">
+                    <span class="text-[9px] font-bold tracking-wider text-slate-400 block uppercase mb-1">Image Manifest Instructions:</span>
+                    @for (lay of img.layers.slice(0, 3); track $index) {
+                      <div class="flex items-center gap-2 font-mono text-slate-350 truncate">
+                        <span class="text-blue-400 flex-shrink-0 font-bold">↳</span> <code class="bg-[#050c18] border border-slate-850 px-1.5 rounded truncate flex-1 block py-px">{{ lay }}</code>
+                      </div>
+                    }
+                    @if (img.layers.length > 3) {
+                      <span class="text-[9px] text-slate-500 italic block pl-4 pt-0.5">+ {{ img.layers.length - 3 }} more stack instructions layers</span>
+                    }
+                  </div>
+
+                  <!-- Image launch action triggers footprint -->
+                  <div class="flex items-center justify-between border-t border-slate-800/60 pt-3 mt-1.5 text-xs font-semibold">
+                    <span class="text-[10px] text-slate-405 font-medium">Created {{ img.created }}</span>
+                    <div class="flex gap-2">
+                      @if (!img.isPrebuilt) {
+                        <button (click)="deleteImage(img.id)" class="text-red-400 hover:text-white hover:bg-red-500/10 p-1.5 rounded duration-150 cursor-pointer border border-transparent hover:border-red-500/10 flex items-center justify-center">
+                          <mat-icon class="text-sm">delete</mat-icon>
+                        </button>
+                      }
+                      <button (click)="launchForm.patchValue({ image: img.id, name: 'service-' + Math.floor(Math.random() * 90 + 10) }); activeTab.set('containers')" class="bg-[#2496ed]/10 text-white hover:bg-[#2496ed] border border-[#2496ed]/20 rounded px-2.5 py-1 font-semibold transition cursor-pointer flex items-center gap-1.5 text-[11px]">
+                        <mat-icon class="text-xs">play_circle_outline</mat-icon>
+                        Deploy Sandbox
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              }
+            </div>
+
+          </div>
+        </div>
+      }
+
+      <!-- TAB 4: PERSISTENT VOLUMES -->
+      @if (activeTab() === 'volumes') {
+        <div class="space-y-6">
+          <div class="bg-[#111e33]/30 border border-slate-800 p-5 rounded-xl space-y-2">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <mat-icon class="text-amber-400">folder_open</mat-icon>
+              Persistent Volumes Dashboard
+            </h2>
+            <p class="text-xs text-slate-300 leading-relaxed max-w-3xl">
+              Containers have isolated, short-lived file systems. Running containers that create database records or save user uploads will lose that data once deleted. 
+              <b>Docker Volumes</b> provide mountable pools that exist outside container lifecycles to preserve data, mirroring files seamlessly inside container mounts!
+            </p>
+          </div>
+
+          <!-- Volume Creator -->
+          <div class="bg-[#0b1323] p-5 rounded-xl border border-slate-800">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-4">
+              <mat-icon class="text-amber-400">add_to_photos</mat-icon>
+              Create New Host Volume Shared Directory
+            </h3>
+
+            <form [formGroup]="volumeForm" (ngSubmit)="createVolume()" class="flex flex-col md:flex-row items-end gap-3 text-xs">
+              
+              <div class="flex-1 w-full text-left">
+                <span class="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Volume Target Name (Unique File Storage Label):</span>
+                <input formControlName="name" placeholder="e.g., app-session-records" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white placeholder-slate-550 focus:outline-none focus:border-blue-500">
+                @if (volumeForm.get('name')?.touched && volumeForm.get('name')?.invalid) {
+                  <span class="text-rose-500 text-[10px] mt-1 block">Volume label label name is required (alphanumeric).</span>
+                }
+              </div>
+
+              <div class="w-full md:w-48 text-left">
+                <span class="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Storage Driver Namespace:</span>
+                <select formControlName="driver" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                  <option value="local">local (Mock Engine)</option>
+                </select>
+              </div>
+
+              <button type="submit" [disabled]="volumeForm.invalid" class="w-full md:w-auto bg-amber-500 hover:bg-amber-600 disabled:bg-slate-750 disabled:text-slate-500 text-slate-950 font-bold py-2 px-5 rounded-lg flex items-center justify-center gap-2 duration-150 cursor-pointer border border-transparent">
+                <mat-icon class="text-sm">create_new_folder</mat-icon>
+                Create Volume Repository
+              </button>
+
+            </form>
+          </div>
+
+          <!-- Volumes List and File Inspectors -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            @for (v of volumes(); track v.name) {
+              <div class="bg-[#0b1323] border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div class="flex items-start justify-between border-b border-slate-800/80 pb-3">
+                  <div class="flex items-center gap-2.5">
+                    <mat-icon class="text-amber-400">folder</mat-icon>
+                    <div>
+                      <h4 class="font-bold text-white text-sm">{{ v.name }}</h4>
+                      <span class="text-[10px] text-slate-400 font-mono">Driver: local/sandbox_pool</span>
+                    </div>
+                  </div>
+                  <button (click)="deleteVolume(v.name)" class="text-rose-400 hover:bg-red-500/10 p-1 rounded transition duration-150 border border-transparent hover:border-red-500/10 cursor-pointer">
+                    <mat-icon class="text-sm">delete</mat-icon>
+                  </button>
+                </div>
+
+                <!-- Files Explorer Tree showing persistent records synced inside -->
+                <div class="space-y-2">
+                  <span class="text-[10px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Volume Storage Filesystem View:</span>
+                  <div class="bg-[#050b14] p-3.5 rounded-xl border border-slate-850 font-mono text-xs space-y-2 max-h-48 overflow-y-auto">
+                    @for (filePath of Object.keys(v.files); track filePath) {
+                      <div class="space-y-1.5 border-b border-slate-900/60 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
+                        <div class="flex items-center gap-2 text-slate-300">
+                          <mat-icon class="text-slate-500 text-sm">insert_drive_file</mat-icon>
+                          <span>{{ filePath }}</span>
+                          <span class="text-[9px] text-slate-500 font-mono">{{ v.files[filePath].length }} B size</span>
+                        </div>
+                        
+                        <!-- Mini Preview block -->
+                        <div class="bg-black/20 p-2 rounded text-[10px] text-slate-400 max-h-24 overflow-y-auto leading-normal whitespace-pre col-span-2 text-left block">
+                          {{ v.files[filePath] }}
+                        </div>
+                      </div>
+                    } @empty {
+                      <span class="text-slate-500 italic block text-center py-5">Empty Volume Registry drive storage. Mount this volume into a container, enter terminal and run `echo "hello" > /app/yourPath/file.txt` to sync files.</span>
+                    }
+                  </div>
+                </div>
+
+                <div class="text-[10px] text-slate-400 text-right">
+                  System Mounted Capacity: 10 MB limit | Created {{ v.created | date:'short' }}
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- TAB 5: VIRTUAL NETWORKS MAP & ROUTER GRAPH -->
+      @if (activeTab() === 'networks') {
+        <div class="space-y-6">
+          <div class="bg-[#111e33]/30 border border-slate-800 p-5 rounded-xl space-y-2">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <mat-icon class="text-purple-400">lan</mat-icon>
+              Isolated Bridge Networks Command Center
+            </h2>
+            <p class="text-xs text-slate-300 leading-relaxed max-w-3xl">
+              Docker allocates virtual network interfaces dynamically. Running containers are bridged inside structured subnets. 
+              In the model below, observe DNS routing resolution at work: click containers in the overview pane, locate their IP addresses, open their shell console terminal on Containers tab, and run <code>ping 172.17.0.3</code> or <code>curl http://my-express-api:3000</code> to watch communications resolve dynamically!
+            </p>
+          </div>
+
+          <!-- Network Creator -->
+          <div class="bg-[#0b1323] p-5 rounded-xl border border-slate-800">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2 mb-4">
+              <mat-icon class="text-purple-400">add_moderator</mat-icon>
+              Create New Custom Virtual Bridge Network (Docker Subnet)
+            </h3>
+
+            <form [formGroup]="networkForm" (ngSubmit)="createNetwork()" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-medium">
+              
+              <div class="md:col-span-2 text-left">
+                <span class="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Network identifier target tag:</span>
+                <input formControlName="name" placeholder="e.g., prod-db-bridge" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white placeholder-slate-550 focus:outline-none focus:border-blue-500">
+                @if (networkForm.get('name')?.touched && networkForm.get('name')?.invalid) {
+                  <span class="text-rose-500 text-[10px] mt-1 block">Network label name is required.</span>
+                }
+              </div>
+
+              <div class="text-left">
+                <span class="block text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1.5">Virtual Subnet Range:</span>
+                <input formControlName="subnet" class="w-full bg-[#111c30] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+              </div>
+
+              <div class="md:col-span-4 flex justify-end pt-2 border-t border-slate-800/60 mt-2 font-semibold">
+                <button type="submit" [disabled]="networkForm.invalid" class="bg-purple-600 hover:bg-purple-700 disabled:bg-slate-750 disabled:text-slate-500 text-white py-2 px-5 rounded-lg flex items-center justify-center gap-2 duration-150 cursor-pointer border border-transparent">
+                  <mat-icon class="text-sm">add_road</mat-icon>
+                  Provision Network Subnet
+                </button>
+              </div>
+
+            </form>
+          </div>
+
+          <!-- Dynamic Network Visualizer layout panel -->
+          <div class="space-y-6" id="network-interactive-section">
+            
+            <!-- Global Drag and Drop Active Containers shelf pool -->
+            <div class="bg-[#0b1323] p-4 rounded-xl border border-slate-800 space-y-3 text-left">
+              <div class="flex items-center justify-between border-b border-slate-800/60 pb-2">
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 select-none">
+                  <mat-icon class="text-[#2496ed] text-sm">view_carousel</mat-icon>
+                  Interactive Containers Dock (Draggable Pucks)
+                </span>
+                <span class="text-[9.5px] text-slate-500 italic">Drag any container puck directly onto a network switch circle or card to hot-plug!</span>
+              </div>
+              <div class="flex flex-wrap gap-2.5 items-center justify-start py-1">
+                @for (c of containers(); track c.id) {
+                  @if (c.status === 'running') {
+                    <div draggable="true"
+                         (dragstart)="onContainerDragStart($event, c.id)"
+                         (dragend)="onContainerDragEnd()"
+                         class="bg-[#111e35]/80 border border-slate-700/80 hover:border-purple-500/80 p-2.5 rounded-lg flex items-center gap-2.5 cursor-grab active:cursor-grabbing transition duration-150 select-none shadow-md hover:shadow-purple-500/10 min-w-[170px] max-w-[220px]">
+                      <div class="p-1.5 bg-purple-500/10 text-purple-400 rounded-md border border-purple-500/20 w-7 h-7 flex items-center justify-center">
+                        <mat-icon class="text-base animate-pulse">view_in_ar</mat-icon>
+                      </div>
+                      <div class="text-left min-w-0 flex-1">
+                        <div class="font-bold text-white text-[11px] truncate">{{ c.name }}</div>
+                        <div class="text-[9px] text-[#2496ed] font-mono leading-tight">{{ c.ipAddress }}</div>
+                        <span class="inline-block text-[8px] font-bold text-xs font-mono uppercase bg-purple-950/40 border border-purple-550/20 px-1 py-[1px] rounded text-purple-300 mt-1">
+                          net: {{ c.network }}
+                        </span>
+                      </div>
+                    </div>
+                  }
+                } @empty {
+                  <div class="text-slate-500 italic text-[11px] py-4 pl-1 text-left w-full flex items-center gap-2">
+                    <mat-icon class="text-slate-600 text-sm">warning</mat-icon>
+                    No running container instances found in stack. Launch an image under the "Images" tab above first!
+                  </div>
+                }
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              
+              <!-- SVG Topology Map Layout (Col span 7) -->
+              <div class="lg:col-span-7 bg-[#050b15] border border-slate-800 rounded-xl p-5 shadow-inner flex flex-col items-center justify-between relative min-h-[380px]">
+                <div class="w-full flex items-center justify-between border-b border-slate-850 pb-2 mb-2">
+                  <span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
+                    <mat-icon class="text-purple-400 text-sm animate-spin">hub</mat-icon>
+                    Multi-Subnet Bridged Router Interconnection Topology Map
+                  </span>
+                  <span class="text-[9px] bg-slate-900 text-purple-400 border border-slate-800 px-2 py-0.5 rounded font-mono">
+                    {{ containers().length }} active nodes
+                  </span>
+                </div>
+
+                <!-- Canvas of Topology Nodes -->
+                <svg width="100%" height="320" viewBox="0 0 600 320" class="mx-auto relative select-none">
+                  <!-- SVG Gradient glow declarations -->
+                  <defs>
+                    <radialGradient id="wanGlow" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.1" />
+                      <stop offset="100%" stop-color="#a855f7" stop-opacity="0" />
+                    </radialGradient>
+                    <linearGradient id="hubGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#1e1b4b" />
+                      <stop offset="100%" stop-color="#311084" />
+                    </linearGradient>
+                  </defs>
+
+                  <!-- Central Host localhost External WAN Network Gateway Cloud -->
+                  <g transform="translate(300, 35)">
+                    <circle cx="0" cy="0" r="24" fill="#0f172a" stroke="#475569" stroke-width="2" />
+                    <circle cx="0" cy="0" r="14" fill="url(#wanGlow)" />
+                    <text x="0" y="-32" fill="#94a3b8" font-size="10" text-anchor="middle" font-weight="bold">LOCALHOST GATEWAY WAN</text>
+                    <text x="0" y="4" fill="#2496ed" font-size="10" text-anchor="middle" font-family="monospace" font-weight="bold">HOST</text>
+                  </g>
+
+                  <!-- Dynamic placement of network switch hub targets -->
+                  @let activeNets = networks();
+                  @let netCount = activeNets.length;
+                  @for (net of activeNets; track net.id) {
+                    @let spacing = netCount > 1 ? 440 / (netCount - 1) : 0;
+                    @let netX = netCount > 1 ? 80 + ($index * spacing) : 300;
+                    @let netY = 160;
+
+                    <!-- Trunk line link to Host Gateway WAN router -->
+                    <line [attr.x1]="300" [attr.y1]="35" [attr.x2]="netX" [attr.y2]="netY" 
+                          stroke="#334155" stroke-width="1.5" stroke-dasharray="3,3" />
+
+                    <!-- Network drop zone group wrapper -->
+                    <g [attr.transform]="'translate(' + netX + ',' + netY + ')'"
+                       (dragover)="onNetworkDragOver($event, net.id)"
+                       (dragleave)="onNetworkDragLeave()"
+                       (drop)="onNetworkDrop($event, net.name)"
+                       class="cursor-pointer group">
+                      
+                      <!-- Inner Highlight Glow if active dragging target -->
+                      @if (activeDropTargetNetworkId() === net.id) {
+                        <circle cx="0" cy="0" r="45" fill="none" stroke="#a855f7" stroke-width="2.5" class="animate-ping" />
+                      }
+
+                      <!-- Hub body circle -->
+                      <circle cx="0" cy="0" r="28" 
+                              [attr.fill]="activeDropTargetNetworkId() === net.id ? '#3b0764' : '#111827'" 
+                              [attr.stroke]="activeDropTargetNetworkId() === net.id ? '#c084fc' : '#a855f7'" 
+                              [attr.stroke-width]="activeDropTargetNetworkId() === net.id ? '4' : '2.5'" />
+                      
+                      <!-- Switch Core Icon symbol -->
+                      <polygon points="-8,4 8,4 4,-4 -4,-4" fill="none" stroke="#e9d5ff" stroke-width="1.5" />
+                      <line x1="-8" y1="-2" x2="8" y2="-2" stroke="#e9d5ff" stroke-width="1" />
+                      
+                      <!-- Switch Labels text -->
+                      <text x="0" y="44" fill="#f8fafc" font-size="10" text-anchor="middle" font-weight="bold" class="drop-shadow-sm">{{ net.name }}</text>
+                      <text x="0" y="56" fill="#a855f7" font-size="8" font-family="monospace" text-anchor="middle" font-weight="semibold">{{ net.subnet || 'host IP router' }}</text>
+
+                      <!-- Connected container orbiter links -->
+                      @let netContainers = getContainersInNetwork(net.name);
+                      @for (c of netContainers; track c.id) {
+                        @if (c.status === 'running') {
+                          @let cCount = netContainers.length;
+                          @let angle = ($index * 360 / (cCount || 1)) + 45;
+                          @let cxCoord = 65 * cosTable(angle);
+                          @let cyCoord = 70 * sinTable(angle);
+
+                          <!-- Dynamic cable links to endpoints -->
+                          <line x1="0" y1="0" [attr.x2]="cxCoord" [attr.y2]="cyCoord" 
+                                stroke="#a855f7" stroke-opacity="0.6" stroke-width="1.5" stroke-dasharray="4,4" />
+
+                          <!-- Draggable container Puck nested group -->
+                          <g [attr.transform]="'translate(' + cxCoord + ',' + cyCoord + ')'"
+                             draggable="true"
+                             (dragstart)="onContainerDragStart($event, c.id)"
+                             (dragend)="onContainerDragEnd()"
+                             class="cursor-grab active:cursor-grabbing hover:scale-110 transition duration-150">
+                            
+                            <!-- Container base node -->
+                            <circle cx="0" cy="0" r="18" fill="#1e1b4b" stroke="#10b981" stroke-width="2" class="hover:stroke-blue-400" />
+                            <circle cx="0" cy="0" r="5" fill="#10b981" class="animate-pulse" />
+
+                            <!-- Label tags placed dynamically -->
+                            <!-- Align to alternate positions to avoid collision overlapping -->
+                            @let textOffset = cyCoord > 0 ? 25 : -20;
+                            <text x="0" [attr.y]="textOffset" fill="#ffffff" font-size="9" font-weight="bold" text-anchor="middle" class="bg-black/80">{{ c.name }}</text>
+                            <text x="0" [attr.y]="textOffset + 10" fill="#34d399" font-size="8.5" font-family="monospace" text-anchor="middle">{{ c.ipAddress }}</text>
+                          </g>
+                        }
+                      }
+                    </g>
+                  }
+                </svg>
+
+                <div class="w-full text-center text-[10px] text-slate-500 pt-3 border-t border-slate-900 flex justify-between font-mono">
+                  <span>📌 Drag any container puck inside the map to move networks</span>
+                  <span>⚡ Topology resolves in real-time</span>
+                </div>
+              </div>
+
+              <!-- Subnets Directory cards list (Col span 5) -->
+              <div class="lg:col-span-5 space-y-4 text-xs font-medium">
+                <span class="text-xs text-slate-400 font-bold block uppercase tracking-wider text-left pl-1">
+                  Custom Bridge Network Drop Zones
+                </span>
+                
+                <div class="space-y-4 max-h-[360px] overflow-y-auto pr-1">
+                  @for (net of networks(); track net.id) {
+                    
+                    <!-- Subnet Drop Card Zone -->
+                    <div class="bg-[#050b14] p-4 rounded-xl border transition-all duration-300 space-y-3 relative overflow-hidden text-left"
+                         [class.border-purple-600/30]="draggedContainerId()"
+                         [class.border-purple-500]="activeDropTargetNetworkId() === net.id"
+                         [class.bg-purple-950/10]="activeDropTargetNetworkId() === net.id"
+                         [style.shadow]="activeDropTargetNetworkId() === net.id ? '0 0 15px rgba(168, 85, 247, 0.15)' : 'none'"
+                         (dragover)="onNetworkDragOver($event, net.id)"
+                         (dragleave)="onNetworkDragLeave()"
+                         (drop)="onNetworkDrop($event, net.name)">
+                      
+                      <!-- Overlay hint when dragging over card elements -->
+                      @if (draggedContainerId()) {
+                        <div class="absolute inset-0 bg-purple-950/20 rounded-xl border-2 border-dashed border-purple-500/50 flex items-center justify-center backdrop-blur-[1px] pointer-events-none select-none z-10 animate-pulse">
+                          <span class="text-[10px] uppercase font-mono text-purple-400 font-black flex items-center gap-1.5">
+                            <mat-icon class="text-sm">get_app</mat-icon> Drop puck to connect
+                          </span>
+                        </div>
+                      }
+
+                      <div class="flex items-start justify-between relative z-1">
+                        <div class="flex items-center gap-2">
+                          <mat-icon class="text-purple-400">lan</mat-icon>
+                          <div>
+                            <h4 class="font-bold text-white text-xs flex items-center gap-1">
+                              {{ net.name }}
+                              @if (net.name === 'bridge') {
+                                <span class="text-[9px] font-sans font-normal border border-purple-500/20 px-1 py-px rounded bg-purple-500/5 text-purple-300">Default</span>
+                              }
+                            </h4>
+                            <span class="text-[10px] text-slate-400 font-mono">Driver: {{ net.driver }}</span>
+                          </div>
+                        </div>
+                        <span class="font-mono text-[10px] text-purple-300 bg-purple-500/5 px-2 py-0.5 rounded border border-purple-500/10 font-bold">
+                          {{ net.subnet || 'host bridge' }}
+                        </span>
+                      </div>
+
+                      <!-- Subnet metadata gateway info -->
+                      <div class="text-[10px] text-slate-500 font-mono flex items-center gap-2 border-b border-slate-900/40 pb-2">
+                        <span>Gateway: {{ net.gateway }}</span>
+                        <span>•</span>
+                        <span>Interface: eth0</span>
+                      </div>
+
+                      <!-- Containers listing attached to this subnet -->
+                      <div class="space-y-1.5 text-[10px] relative z-1 shadow-inner">
+                        <span class="text-[9px] font-bold tracking-wider text-slate-400 block uppercase">Linked endpoints:</span>
+                        
+                        @let connectedList = getContainersInNetwork(net.name);
+                        @for (c of connectedList; track c.id) {
+                          <div class="bg-[#0b1323]/80 p-2 rounded-lg border border-slate-800/80 flex items-center justify-between font-mono gap-4 select-none">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              <span class="text-slate-200 font-bold text-[11px] truncate">{{ c.name }}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <span class="text-emerald-400 text-[10px] font-bold">{{ c.ipAddress }}</span>
+                              
+                              <!-- Hot Changer Selector Fallback for seamless accessibility (A11y rule compliance) -->
+                              <select (change)="moveContainerToNetwork(c.id, $any($event.target).value)" 
+                                      class="bg-slate-900 border border-slate-700 text-slate-300 text-[9px] font-sans px-1 py-0.5 rounded focus:outline-none focus:border-purple-500 cursor-pointer">
+                                @for (n of networks(); track n.id) {
+                                  <option [value]="n.name" [selected]="n.name === net.name">{{ n.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          </div>
+                        } @empty {
+                          <span class="text-slate-500 italic block pl-1 text-[10px]">No container instances attached to this virtual subnet bridge. Drag a container puck here above!</span>
+                        }
+                      </div>
+
+                      @if (!['bridge', 'host', 'none'].includes(net.name)) {
+                        <div class="pt-2 border-t border-slate-900/60 mt-2 flex justify-end relative z-1">
+                          <button (click)="deleteNetwork(net.id)" class="text-rose-400 hover:text-white text-[10px] font-bold border border-transparent hover:border-red-500/10 hover:bg-rose-500/10 px-2.5 py-1 rounded transition duration-150 cursor-pointer">
+                            Shutdown interface subnet
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  } @empty {
+                    <div class="text-slate-500 italic text-center py-8 bg-[#050b15] border border-slate-850 rounded-xl">
+                      <p class="text-xs">No subnets configured yet.</p>
+                    </div>
+                  }
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      }
+        </div>
+      }
+
+      <!-- TAB 6: AI COPILOT & DEV OPS ASSISTANT -->
+      @if (activeTab() === 'copilot') {
+        <div class="space-y-6">
+          <div class="bg-gradient-to-r from-purple-950/20 via-[#0b1527] to-[#040913] border border-purple-500/10 p-5 rounded-2xl flex items-center gap-4 relative overflow-hidden">
+            <div class="p-4 bg-purple-500/10 text-purple-400 rounded-2xl border border-purple-500/20 shadow-lg shadow-purple-500/5">
+              <mat-icon class="text-3xl animate-pulse">psychology</mat-icon>
+            </div>
+            <div class="text-left">
+              <h2 class="text-lg font-bold text-white tracking-tight flex items-center gap-2">AI Docker Copilot Dashboard Explainer</h2>
+              <p class="text-xs text-slate-300 leading-relaxed max-w-2xl mt-0.5">
+                Optimize image sizes, resolve caching issues, write high-performance multi-stage Dockerfiles, or construct docker-compose topologies. Ask anything. Copilot translates Gemini prompts directly into our live Sandboxes!
+              </p>
+            </div>
+          </div>
+
+          <!-- Sandbox Copilot Chat Command Workspace -->
+          <div class="bg-[#0b1323] rounded-2xl border border-slate-800 flex flex-col justify-between shadow-xl min-h-[480px]">
+            
+            <!-- Message streams -->
+            <div class="p-5 flex-1 overflow-y-auto space-y-4 max-h-[380px]">
+              @for (msg of copilotMessages(); track $index) {
+                <div class="flex items-start gap-3.5"
+                  [class.justify-end]="msg.role === 'user'">
+                  
+                  @if (msg.role === 'assistant') {
+                    <div class="w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20 shadow flex-shrink-0">
+                      <mat-icon class="text-base font-bold">psychology</mat-icon>
+                    </div>
+                  }
+
+                  <div class="max-w-[75%] rounded-2xl px-4 py-3 leading-relaxed text-xs shadow-md text-left"
+                    [class.bg-[#121c32]]="msg.role === 'assistant'"
+                    [class.text-slate-100]="msg.role === 'assistant'"
+                    [class.border]="msg.role === 'assistant'"
+                    [class.border-slate-800]="msg.role === 'assistant'"
+                    [class.bg-purple-600]="msg.role === 'user'"
+                    [class.text-white]="msg.role === 'user'">
+                    
+                    <div class="whitespace-pre-wrap leading-relaxed">{{ msg.text }}</div>
+                    
+                    <!-- Quick injection tool helper inside response blocks -->
+                    @if (msg.role === 'assistant' && (msg.text.includes('```dockerfile') || msg.text.includes('FROM '))) {
+                      <div class="mt-3.5 pt-2 border-t border-slate-800 flex justify-end">
+                        <button (click)="extractAndLoadDockerfile(msg.text)" class="bg-purple-500 hover:bg-purple-600 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer leading-normal border border-transparent">
+                          <mat-icon class="text-[11px] font-bold">add_to_queue</mat-icon>
+                          Load Dockerfile Into Compiler Tab
+                        </button>
+                      </div>
+                    }
+
+                    <span class="text-[9px] text-slate-500 block text-right mt-1 font-mono uppercase tracking-wider">{{ msg.time }}</span>
+                  </div>
+
+                </div>
+              }
+
+              @if (copilotLoading()) {
+                <div class="flex items-start gap-3.5">
+                  <div class="w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20 shadow flex-shrink-0">
+                    <mat-icon class="text-base animate-spin">autorenew</mat-icon>
+                  </div>
+                  <div class="bg-[#121c32] rounded-2xl px-4 py-3 border border-slate-800/85">
+                    <span class="text-xs text-slate-400 italic flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 bg-purple-500 rounded-full animate-bounce"></span>
+                      Consulting model via Server endpoint daemon...
+                    </span>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- Predefined AI Quick Questions -->
+            <div class="px-5 py-2.5 bg-slate-900/40 border-t border-slate-800 flex flex-wrap gap-2 text-[10px]">
+              <span class="text-slate-500 font-semibold uppercase tracking-wider self-center mr-1">Suggested prompts:</span>
+              <button (click)="copilotInput.setValue('Write an optimized multi-stage Dockerfile for an Express Node.js app using dist/ production practices.'); askCopilot()" class="bg-[#132034] hover:bg-purple-900/20 hover:text-purple-300 px-2.5 py-1 rounded-full border border-slate-800 text-slate-400 font-medium transition cursor-pointer font-semibold">Optimize NodeJS App</button>
+              <button (click)="copilotInput.setValue('Explain why Alpine baseline images are preferred over standard Ubuntu and how caching mechanics speed up builds.'); askCopilot()" class="bg-[#132034] hover:bg-purple-900/20 hover:text-purple-300 px-2.5 py-1 rounded-full border border-slate-800 text-slate-400 font-medium transition cursor-pointer font-semibold">Explain Layer Caching</button>
+              <button (click)="copilotInput.setValue('Generate a secure template Dockerfile for PostgreSQL with volumes mapped to preserve databases.'); askCopilot()" class="bg-[#132034] hover:bg-purple-900/20 hover:text-purple-300 px-2.5 py-1 rounded-full border border-slate-800 text-slate-400 font-medium transition cursor-pointer font-semibold">Secure Postgres Volume</button>
+            </div>
+
+            <!-- Text Input Trigger area -->
+            <div class="p-4 bg-slate-900/80 border-t border-slate-800/80 rounded-b-2xl flex gap-3 text-xs">
+              <input [formControl]="copilotInput" (keyup.enter)="askCopilot()" placeholder="Ask AI: e.g. How do I publish subnets or reduce image layer size?" class="flex-1 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl px-4 py-2.5 focus:outline-none text-white placeholder-slate-550 placeholder:text-xs text-xs">
+              <button (click)="askCopilot()" [disabled]="copilotLoading() || !copilotInput.value" class="bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-bold px-5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 border border-transparent">
+                Ask Copilot
+                <mat-icon class="text-sm font-bold">send</mat-icon>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      }
+
+    </main>
+  </div>
+
+  <!-- OVERLAY DIALOGS, SIMULATED POPUPS AND VIEWPORTS SHELLS -->
+
+  <!-- OVERLAY 1: INTERACTIVE CLI terminal CONSOLE SHIELD -->
+  @if (terminalContainer()) {
+    <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="w-full max-w-2xl bg-[#03070e] border border-slate-800 rounded-2xl shadow-2xl flex flex-col justify-between overflow-hidden">
+        
+        <!-- Header status -->
+        <div class="bg-[#0b1324] px-4 py-3 border-b border-slate-850 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="font-bold text-xs font-mono text-slate-300 select-none">
+              Interactive Execution terminal bash on [container_alias: {{ terminalContainer()?.name }}]
+            </span>
+          </div>
+          <button (click)="closeTerminal()" class="text-slate-400 hover:text-white flex items-center justify-center p-1 rounded-full bg-slate-900 hover:bg-slate-800 cursor-pointer">
+            <mat-icon class="text-sm">close</mat-icon>
+          </button>
+        </div>
+
+        <!-- Terminal screen console logs -->
+        <!-- Viewport is linked to standard Ref pointer to automatically scroll to bottom -->
+        <div #terminalBox class="p-4 bg-slate-950/90 font-mono text-[11px] text-[#38bdf8] h-72 overflow-y-auto space-y-1 text-left">
+          @for (line of termLines(); track $index) {
+            <div class="whitespace-pre-wrap leading-relaxed select-text">{{ line }}</div>
+          }
+        </div>
+
+        <!-- CLI shell action input bar -->
+        <div class="p-3 bg-slate-900/60 border-t border-slate-850 flex items-center gap-2 font-mono">
+          <span class="text-emerald-400 text-xs font-bold font-mono">
+            sh:{{ terminalContainer()?.currentWorkdir }} #
+          </span>
+          <input [formControl]="termInput" (keyup.enter)="executeTermCommand()" placeholder="ls, cd, pwd, cat, ping, curl, echo..." class="flex-1 bg-transparent text-slate-100 placeholder-slate-600 text-xs font-mono focus:outline-none focus:ring-0 ring-0 focus:border-transparent accent-transparent">
+          <button (click)="executeTermCommand()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-3 py-1.5 rounded cursor-pointer leading-normal flex items-center gap-1 font-sans border border-transparent">
+            Submit
+            <mat-icon class="text-[11px] font-bold">keyboard_return</mat-icon>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  }
+
+  <!-- OVERLAY 2: RAW STREAMS LOGS STREAM VIEWER -->
+  @if (logsContainer()) {
+    <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="w-full max-w-2xl bg-[#040811] border border-slate-800 rounded-2xl shadow-2xl flex flex-col justify-between overflow-hidden">
+        
+        <!-- Header title -->
+        <div class="bg-[#0b1324] px-4 py-3 border-b border-slate-850 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <mat-icon class="text-blue-400 text-sm">subtitles</mat-icon>
+            <span class="font-bold text-xs text-slate-300 select-none">
+              Stdout logs stream viewport output for Container [{{ logsContainer()?.name }}]
+            </span>
+          </div>
+          <button (click)="closeLogsPanel()" class="text-slate-400 hover:text-white flex items-center justify-center p-1 rounded-full bg-slate-900 hover:bg-slate-800 cursor-pointer">
+            <mat-icon class="text-sm">close</mat-icon>
+          </button>
+        </div>
+
+        <!-- Logs stream frame -->
+        <div class="p-4 bg-slate-950 font-mono text-[10px] h-64 overflow-y-auto space-y-1.5 text-left">
+          @for (log of logsContainer()?.logs; track $index) {
+            <div class="flex items-start gap-3.5 leading-relaxed border-b border-slate-900/40 pb-1">
+              <span class="text-slate-500 font-mono text-[9px] uppercase self-center min-w-[55px] text-right bg-slate-900 px-1 py-px rounded">[system]</span>
+              <span class="text-slate-350 select-text font-mono">{{ log.text }}</span>
+            </div>
+          } @empty {
+            <span class="text-slate-500 italic block py-4 text-center">Empty system log stream.</span>
+          }
+        </div>
+
+        <div class="bg-slate-900/60 p-3 text-[10px] border-t border-slate-850 text-slate-450 tracking-wide text-right font-medium">
+          Interactive Logs stream is buffer-throttled. Listening dynamically.
+        </div>
+
+      </div>
+    </div>
+  }
+
+  <!-- OVERLAY 3: SIMULATED HTML INTERACTIVE BROWSER POPUP (Docker Port Publication checker!) -->
+  @if (webBrowserContainer()) {
+    <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="w-full max-w-3xl bg-white text-slate-800 border-4 border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+        
+        <!-- Browser Chrome outline address bars -->
+        <div class="bg-slate-700 px-4 py-3 flex items-center justify-between text-white border-b border-slate-600 gap-4">
+          
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            <span class="w-3 h-3 rounded-full bg-rose-500 block"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500 block"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500 block"></span>
+          </div>
+
+          <div class="flex-1 bg-slate-800 rounded-lg px-4 py-1.5 flex items-center justify-between text-xs border border-slate-900 font-mono max-w-xl text-slate-300">
+            <div class="flex items-center gap-1.5 truncate">
+              <mat-icon class="text-sm text-emerald-400">lock_outline</mat-icon>
+              <span>http://localhost:<b>{{ webBrowserHostPort() }}</b>/</span>
+            </div>
+            <span class="text-[9px] bg-emerald-500/10 text-emerald-400 px-1 py-px rounded border border-emerald-400/20 font-bold uppercase">Port Binded</span>
+          </div>
+
+          <button (click)="closeLocalBrowser()" class="text-slate-300 hover:text-white flex items-center justify-center p-1 rounded-full bg-slate-850 cursor-pointer">
+            <mat-icon class="text-sm">close</mat-icon>
+          </button>
+        </div>
+
+        <!-- Rendered HTML Content Workspace -->
+        <!-- Demonstrates exactly what container output HTML produces, teaching DNS bridges accurately -->
+        <div class="bg-slate-950 p-6 min-h-[300px] overflow-y-auto text-left">
+          <div [innerHTML]="webBrowserContent()"></div>
+        </div>
+
+        <div class="bg-slate-100/80 px-4 py-2 text-[10px] text-slate-500 border-t border-slate-200 flex items-center justify-between font-mono">
+          <span>Simulation Address: Container {{ webBrowserContainer()?.ipAddress }} | Bridge Network Interface bound</span>
+          <span class="text-blue-600 font-bold">HTTP 1.1 Server Ready</span>
+        </div>
+
+      </div>
+    </div>
+  }
+
+</div>

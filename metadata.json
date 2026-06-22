@@ -1,0 +1,6 @@
+{
+  "name": "Docker Simulator",
+  "description": "An interactive Docker Simulator and Container Playground. Write Dockerfiles, build and cache images, spin up containers with resource throttling, mount volumes, inspect custom virtual networks, and use the terminal CLI with intra-container networking, with guidance from an AI Docker Copilot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

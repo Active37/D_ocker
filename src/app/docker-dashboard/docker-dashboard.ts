@@ -1,0 +1,2144 @@
+import { Component, signal, computed, effect, inject, OnDestroy, AfterViewInit, ElementRef, ViewChild } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
+import { MatIconModule } from '@angular/material/icon';
+import { DockerCacheService } from './docker-cache';
+
+// Simulated Models for Container Engine
+export interface VirtualFile {
+  type: 'file' | 'dir';
+  content?: string;
+  size?: number;
+}
+
+export type FileSystem = Record<string, VirtualFile>;
+
+export interface DockerImage {
+  id: string;
+  tag: string;
+  size: string;
+  created: string;
+  isPrebuilt: boolean;
+  layers: string[];
+  dockerfile: string;
+  env: Record<string, string>;
+  workdir: string;
+  ports: number[];
+  cmd: string;
+  filesystem: FileSystem;
+}
+
+export interface VolumeMount {
+  volumeName: string;
+  containerPath: string;
+}
+
+export interface ContainerStats {
+  cpu: number;
+  memory: number;
+  memoryLimit: number;
+  netIn: number;
+  netOut: number;
+}
+
+export interface LogLine {
+  stream: 'stdout' | 'stderr' | 'system';
+  text: string;
+  time: string;
+}
+
+export interface DockerContainer {
+  id: string;
+  name: string;
+  imageId: string;
+  imageTag: string;
+  status: 'running' | 'stopped' | 'paused' | 'exited';
+  exitCode: number;
+  created: string;
+  ports: Record<number, number>; // e.g., { 8080: 80 }
+  ipAddress: string;
+  network: string; // e.g., 'bridge'
+  env: Record<string, string>;
+  workdir: string;
+  volumes: VolumeMount[];
+  stats: ContainerStats;
+  logs: LogLine[];
+  filesystem: FileSystem;
+  currentWorkdir: string;
+  history: string[]; // shell command history
+  cmd: string;
+}
+
+export interface DockerVolume {
+  name: string;
+  driver: 'local';
+  scope: 'local';
+  created: string;
+  files: Record<string, string>; // Map of relative files inside volume root
+}
+
+export interface DockerNetwork {
+  id: string;
+  name: string;
+  driver: 'bridge' | 'host' | 'none';
+  subnet: string;
+  gateway: string;
+  containers: string[]; // List of connected container IDs
+}
+
+@Component({
+  selector: 'app-docker-dashboard',
+  imports: [CommonModule, ReactiveFormsModule, MatIconModule],
+  templateUrl: './docker-dashboard.html',
+  styleUrl: './docker-dashboard.css',
+})
+export class DockerDashboard implements OnDestroy, AfterViewInit {
+  private fb = inject(FormBuilder);
+  public cacheService = inject(DockerCacheService);
+
+  // Active Panel Navigation State
+  activeTab = signal<'dashboard' | 'containers' | 'images' | 'volumes' | 'networks' | 'copilot'>('dashboard');
+
+  // Template utilities
+  Object = Object;
+  Math = Math;
+
+  getContainersInNetwork(networkName: string): DockerContainer[] {
+    return this.containers().filter(c => c.network === networkName);
+  }
+
+  cosTable(deg: number): number {
+    return Math.cos((deg * Math.PI) / 180);
+  }
+
+  sinTable(deg: number): number {
+    return Math.sin((deg * Math.PI) / 180);
+  }
+
+  // Interactive Overlays
+  logsContainer = signal<DockerContainer | null>(null);
+  terminalContainer = signal<DockerContainer | null>(null);
+  webBrowserContainer = signal<DockerContainer | null>(null);
+  webBrowserHostPort = signal<number | null>(null);
+  webBrowserContent = signal<string>('');
+
+  // AI Copilot state
+  copilotInput = new FormControl('');
+  copilotMessages = signal<{ role: 'user' | 'assistant'; text: string; time: string }[]>([
+    {
+      role: 'assistant',
+      text: "👋 Hello! I am your AI Docker Copilot. Ask me how to build, optimize, or troubleshoot Docker environments. You can also generate a custom Dockerfile and load it directly into the builder!",
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+  copilotLoading = signal<boolean>(false);
+
+  // Image & Registry State
+  dockerfileInput = signal<string>(`FROM node:18-alpine
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY . .
+ENV PORT=3000
+EXPOSE 3000
+CMD ["node", "app.js"]`);
+
+  newImageTag = new FormControl('my-node-service:latest');
+  buildLogs = signal<string[]>([]);
+  isBuilding = signal<boolean>(false);
+  buildProgress = signal<number>(0);
+  selectedTemplate = signal<string>('node');
+
+  // --- Real-time Dockerfile Analysis & Linter ---
+  editorSubTab = signal<'edit' | 'preview'>('edit');
+  rightPaneSubTab = signal<'layers' | 'logs'>('layers');
+  editingLayerIdx = signal<number | null>(null);
+  editingLayerValue = new FormControl('');
+
+  parsedDockerfile = computed(() => {
+    const raw = this.dockerfileInput();
+    const lines = raw.split('\n');
+    return lines.map((lineStr, idx) => {
+      const trimmed = lineStr.trim();
+      const isEmpty = trimmed === '';
+      const isComment = trimmed.startsWith('#');
+      
+      let instruction = '';
+      let args = '';
+      
+      if (!isEmpty && !isComment) {
+        const spaceIndex = trimmed.indexOf(' ');
+        if (spaceIndex > 0) {
+          instruction = trimmed.substring(0, spaceIndex).trim();
+          args = trimmed.substring(spaceIndex + 1).trim();
+        } else {
+          instruction = trimmed;
+        }
+      }
+      
+      return {
+        lineNumber: idx + 1,
+        raw: lineStr,
+        instruction,
+        arguments: args,
+        isComment,
+        isEmpty
+      };
+    });
+  });
+
+  dockerfileErrors = computed(() => {
+    const lines = this.parsedDockerfile();
+    const errors: {
+      line: number;
+      instruction: string;
+      severity: 'error' | 'warning';
+      message: string;
+      type: string;
+      tip: string;
+    }[] = [];
+    
+    // Check 1: FROM presence
+    const hasFrom = lines.some(l => l.instruction.toUpperCase() === 'FROM');
+    if (!hasFrom && lines.some(l => !l.isEmpty && !l.isComment)) {
+      errors.push({
+        line: 1,
+        instruction: 'FROM',
+        severity: 'error',
+        message: 'No base image specified.',
+        type: 'missing_from',
+        tip: 'Begin your Dockerfile with a FROM command (e.g., "FROM node:18-alpine") to specify the parent image.'
+      });
+    }
+
+    let cmdCount = 0;
+    
+    lines.forEach((l, idx) => {
+      if (l.isEmpty || l.isComment) return;
+      
+      const upperInst = l.instruction.toUpperCase();
+      const validInstructions = [
+        'FROM', 'RUN', 'CMD', 'LABEL', 'MAINTAINER', 'EXPOSE', 'ENV', 
+        'ADD', 'COPY', 'ENTRYPOINT', 'VOLUME', 'USER', 'WORKDIR', 
+        'ARG', 'ONBUILD', 'STOPSIGNAL', 'HEALTHCHECK', 'SHELL'
+      ];
+      
+      // Check 2: Unrecognized instruction
+      if (!validInstructions.includes(upperInst)) {
+        errors.push({
+          line: l.lineNumber,
+          instruction: l.instruction,
+          severity: 'error',
+          message: `Unrecognized instruction '${l.instruction}'.`,
+          type: 'unrecognized_instruction',
+          tip: `Ensure the instruction is spelled correctly. Common instructions: FROM, RUN, COPY, ENV, EXPOSE, CMD, WORKDIR.`
+        });
+        return;
+      }
+      
+      // Check 3: Check uppercase suggestion
+      if (l.instruction !== upperInst) {
+        errors.push({
+          line: l.lineNumber,
+          instruction: l.instruction,
+          severity: 'warning',
+          message: `Instruction '${l.instruction}' should be uppercase '${upperInst}'.`,
+          type: 'lowercase_instruction',
+          tip: `It is standard convention to use UPPERCASE for Dockerfile action words to distinguish them from arguments.`
+        });
+      }
+      
+      // Check 4: Missing arguments
+      if (!l.arguments && upperInst !== 'CMD' && upperInst !== 'ENTRYPOINT' && upperInst !== 'FROM' && upperInst !== 'RUN') {
+        errors.push({
+          line: l.lineNumber,
+          instruction: upperInst,
+          severity: 'error',
+          message: `Empty arguments for '${upperInst}' instruction.`,
+          type: 'empty_arguments',
+          tip: `Provide arguments for your instruction. For example: "EXPOSE 3000" or "WORKDIR /app".`
+        });
+      }
+      
+      // Check 5: Multiple CMD warnings
+      if (upperInst === 'CMD') {
+        cmdCount++;
+        if (cmdCount > 1) {
+          errors.push({
+            line: l.lineNumber,
+            instruction: upperInst,
+            severity: 'warning',
+            message: `Multiple CMD instructions found. Only the final one is active.`,
+            type: 'multiple_cmd',
+            tip: `Docker only executes the final CMD instruction. Previous CMDs on lines before this will be ignored.`
+          });
+        }
+        
+        // Check 6: Single quotes inside JSON array for CMD
+        const argsStr = l.arguments.trim();
+        if (argsStr.startsWith('[') && argsStr.endsWith(']')) {
+          if (argsStr.includes("'")) {
+            errors.push({
+              line: l.lineNumber,
+              instruction: upperInst,
+              severity: 'error',
+              message: `Single quotes used in CMD JSON array structure.`,
+              type: 'cmd_single_quotes',
+              tip: `Change single quotes to double quotes. Example: CMD ["node", "app.js"]. Docker requires double quotes for exec form.`
+            });
+          }
+        }
+      }
+      
+      // Check 7: EXPOSE ports validation
+      if (upperInst === 'EXPOSE') {
+        const portStr = l.arguments.trim().split(/\s+/)[0];
+        const portNum = parseInt(portStr, 10);
+        if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+          errors.push({
+            line: l.lineNumber,
+            instruction: upperInst,
+            severity: 'error',
+            message: `Invalid port mapping number '${portStr}'.`,
+            type: 'invalid_port',
+            tip: `Port must be a valid integer between 1 and 65535. E.g., EXPOSE 80 or EXPOSE 3000.`
+          });
+        }
+      }
+      
+      // Check 8: COPY destination argument presence
+      if (upperInst === 'COPY' || upperInst === 'ADD') {
+        const parts = l.arguments.trim().split(/\s+/);
+        if (parts.length < 2 && !l.arguments.includes('[')) {
+          errors.push({
+            line: l.lineNumber,
+            instruction: upperInst,
+            severity: 'error',
+            message: `COPY/ADD requires both source and destination folders.`,
+            type: 'copy_missing_dest',
+            tip: `Specify source and destination. E.g., "COPY package.json ./" or "COPY . ."`
+          });
+        }
+      }
+      
+      // Check 9: WORKDIR before relative COPY warning
+      if (upperInst === 'COPY' && !lines.some((prevLine, prevIdx) => prevIdx < idx && prevLine.instruction.toUpperCase() === 'WORKDIR')) {
+        const parts = l.arguments.trim().split(/\s+/);
+        const dest = parts[parts.length - 1] || '';
+        if (dest.startsWith('.') || dest === './' || dest === '.') {
+          errors.push({
+            line: l.lineNumber,
+            instruction: upperInst,
+            severity: 'warning',
+            message: `Relative COPY path used without a prior WORKDIR defined.`,
+            type: 'copy_relative_no_workdir',
+            tip: `It is highly recommended to declare "WORKDIR /app" first so files don't clutter the default filesystem root directory.`
+          });
+        }
+      }
+    });
+    
+    return errors;
+  });
+
+  applyQuickFix(error: { line: number; instruction: string; severity: 'error' | 'warning'; message: string; type: string; tip: string }) {
+    const raw = this.dockerfileInput();
+    const lines = raw.split('\n');
+    const idx = error.line - 1;
+    if (idx < 0 || idx >= lines.length) return;
+    
+    const line = lines[idx];
+    const trimmed = line.trim();
+    
+    if (error.type === 'lowercase_instruction') {
+      const spaceIndex = trimmed.indexOf(' ');
+      if (spaceIndex > 0) {
+        const inst = trimmed.substring(0, spaceIndex);
+        lines[idx] = line.replace(inst, inst.toUpperCase());
+      } else {
+        lines[idx] = line.replace(trimmed, trimmed.toUpperCase());
+      }
+    } else if (error.type === 'cmd_single_quotes') {
+      lines[idx] = line.replace(/'/g, '"');
+    } else if (error.type === 'missing_from') {
+      lines.unshift('FROM node:18-alpine');
+    } else if (error.type === 'unrecognized_instruction') {
+      if (trimmed.toUpperCase().startsWith('INSTALL ')) {
+        lines[idx] = line.replace(/install /i, 'RUN ');
+      } else {
+        lines[idx] = `# Fixed unrecognized instruction: ${line}`;
+      }
+    } else if (error.type === 'copy_missing_dest') {
+      lines[idx] = `${trimmed} ./`;
+    }
+    
+    this.dockerfileInput.set(lines.join('\n'));
+    this.editingLayerIdx.set(null);
+  }
+
+  moveLayer(idx: number, direction: 'up' | 'down') {
+    const lines = this.dockerfileInput().split('\n');
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= lines.length) return;
+    
+    const temp = lines[idx];
+    lines[idx] = lines[targetIdx];
+    lines[targetIdx] = temp;
+    
+    this.dockerfileInput.set(lines.join('\n'));
+    this.editingLayerIdx.set(null);
+  }
+
+  deleteLayer(idx: number) {
+    const lines = this.dockerfileInput().split('\n');
+    lines.splice(idx, 1);
+    this.dockerfileInput.set(lines.join('\n'));
+    this.editingLayerIdx.set(null);
+  }
+
+  addNewLayer(instruction: string) {
+    const current = this.dockerfileInput().trim();
+    let template = '';
+    
+    switch (instruction.toUpperCase()) {
+      case 'FROM':
+        template = 'FROM node:18-alpine';
+        break;
+      case 'RUN':
+        template = 'RUN apk update && apk add curl';
+        break;
+      case 'COPY':
+        template = 'COPY . .';
+        break;
+      case 'ENV':
+        template = 'ENV NEW_API_KEY=secrets_value';
+        break;
+      case 'EXPOSE':
+        template = 'EXPOSE 8080';
+        break;
+      case 'WORKDIR':
+        template = 'WORKDIR /app';
+        break;
+      case 'CMD':
+        template = 'CMD ["node", "app.js"]';
+        break;
+      default:
+        template = 'RUN echo "custom-layer"';
+    }
+    
+    const newVal = current + (current ? '\n' : '') + template;
+    this.dockerfileInput.set(newVal);
+  }
+
+  startEditLayer(idx: number, currentArgs: string) {
+    this.editingLayerIdx.set(idx);
+    this.editingLayerValue.setValue(currentArgs);
+  }
+
+  saveLayerEdit(idx: number, instruction: string) {
+    const lines = this.dockerfileInput().split('\n');
+    const newArgs = this.editingLayerValue.value || '';
+    if (instruction) {
+      lines[idx] = `${instruction} ${newArgs}`;
+    } else {
+      lines[idx] = newArgs;
+    }
+    this.dockerfileInput.set(lines.join('\n'));
+    this.editingLayerIdx.set(null);
+  }
+
+  highlightDockerfile(rawText: string): string {
+    if (!rawText) return '<span class="text-slate-500 italic">No instructions</span>';
+    const lines = rawText.split('\n');
+    return lines.map((line, idx) => {
+      const lineNum = idx + 1;
+      const trimmed = line.trim();
+      const linePrfx = `<span class="inline-block w-6 text-slate-600 font-mono text-right select-none pr-3.5 mr-3 border-r border-slate-800 text-[10px]">${lineNum}</span>`;
+      
+      if (!trimmed) {
+        return `${linePrfx}&nbsp;`;
+      }
+      
+      if (trimmed.startsWith('#')) {
+        return `${linePrfx}<span class="text-slate-550 italic">${this.escapeHtml(line)}</span>`;
+      }
+      
+      const spaceIndex = trimmed.indexOf(' ');
+      if (spaceIndex > 0) {
+        const cmd = trimmed.substring(0, spaceIndex);
+        const args = trimmed.substring(spaceIndex + 1);
+        const upperCmd = cmd.toUpperCase();
+        
+        const validInstructions = [
+          'FROM', 'RUN', 'CMD', 'LABEL', 'MAINTAINER', 'EXPOSE', 'ENV', 
+          'ADD', 'COPY', 'ENTRYPOINT', 'VOLUME', 'USER', 'WORKDIR', 
+          'ARG', 'ONBUILD', 'STOPSIGNAL', 'HEALTHCHECK', 'SHELL'
+        ];
+        
+        const isInstructionValid = validInstructions.includes(upperCmd);
+        const isUppercase = cmd === upperCmd;
+        
+        let cmdClass = '';
+        if (isInstructionValid) {
+          cmdClass = isUppercase ? 'text-amber-400 font-bold' : 'text-amber-450/80 font-bold italic';
+        } else {
+          cmdClass = 'text-rose-400 font-bold underline decoration-dotted';
+        }
+        
+        let escapedArgs = this.escapeHtml(args);
+        
+        if (escapedArgs.startsWith('[') && escapedArgs.endsWith(']')) {
+          escapedArgs = escapedArgs.replace(/"([^"]+)"/g, '<span class="text-emerald-400">"$1"</span>');
+          escapedArgs = escapedArgs.replace(/'([^']+)'/g, '<span class="text-rose-500 font-bold">\'$1\'</span>');
+        } else {
+          escapedArgs = escapedArgs.replace(/(\b\d{2,5}\b)/g, '<span class="text-emerald-400 font-semibold font-mono">$1</span>');
+          escapedArgs = escapedArgs.replace(/(\b[A-Za-z0-9_]+)=/g, '<span class="text-blue-400 font-semibold">$1</span>=');
+        }
+        
+        return `${linePrfx}<span class="${cmdClass}">${cmd}</span> ${escapedArgs}`;
+      } else {
+        const upperCmd = trimmed.toUpperCase();
+        const validInstructions = [
+          'FROM', 'RUN', 'CMD', 'LABEL', 'MAINTAINER', 'EXPOSE', 'ENV', 
+          'ADD', 'COPY', 'ENTRYPOINT', 'VOLUME', 'USER', 'WORKDIR', 
+          'ARG', 'ONBUILD', 'STOPSIGNAL', 'HEALTHCHECK', 'SHELL'
+        ];
+        const cmdClass = validInstructions.includes(upperCmd) ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold underline decoration-dotted';
+        return `${linePrfx}<span class="${cmdClass}">${this.escapeHtml(line)}</span>`;
+      }
+    }).join('\n');
+  }
+
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // Pulling public image state
+  pullImageName = new FormControl('redis:alpine');
+  pullLogs = signal<string[]>([]);
+  isPulling = signal<boolean>(false);
+
+  // Form group for launching containers
+  launchForm: FormGroup;
+
+  // Form for creating Volumes / Networks
+  volumeForm: FormGroup;
+  networkForm: FormGroup;
+
+  // Active Terminal IO State
+  termInput = new FormControl('');
+  termLines = signal<string[]>([]);
+  @ViewChild('terminalBox') terminalBox?: ElementRef;
+
+  // State Stores (Signals)
+  images = signal<DockerImage[]>([]);
+  containers = signal<DockerContainer[]>([]);
+  volumes = signal<DockerVolume[]>([]);
+  networks = signal<DockerNetwork[]>([]);
+
+  // Simulation Update Loop Timer
+  private stateTimer?: ReturnType<typeof setInterval>;
+
+  constructor() {
+    this.launchForm = this.fb.group({
+      name: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9_-]+$/)]],
+      image: ['', Validators.required],
+      hostPort: [8080, [Validators.min(1024), Validators.max(65535)]],
+      network: ['bridge'],
+      envString: ['NODE_ENV=production,DEBUG=app:*'],
+      volumeName: [''],
+      volumeMountPath: ['']
+    });
+
+    this.volumeForm = this.fb.group({
+      name: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9_-]+$/)]],
+      driver: ['local']
+    });
+
+    this.networkForm = this.fb.group({
+      name: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9_-]+$/)]],
+      driver: ['bridge'],
+      subnet: ['172.19.0.0/16']
+    });
+
+    // Seed Initial State
+    this.seedDefaultState();
+
+    // Start Real-time Worker (Updates CPU/Memory stats dynamically)
+    this.startSimulationTick();
+
+    // Monitor template selections to swap default Dockerfiles
+    effect(() => {
+      const templ = this.selectedTemplate();
+      this.loadTemplateDockerfile(templ);
+    });
+  }
+
+  ngAfterViewInit() {
+    this.scrollToTerminalBottom();
+  }
+
+  ngOnDestroy() {
+    if (this.stateTimer) {
+      clearInterval(this.stateTimer);
+    }
+  }
+
+  // --- Seed Initial Docker Environment ---
+  private seedDefaultState() {
+    // 1. Volumes
+    const defaultVolumes: DockerVolume[] = [
+      {
+        name: 'database-records',
+        driver: 'local',
+        scope: 'local',
+        created: new Date().toISOString(),
+        files: {
+          'user_data.json': JSON.stringify([
+            { id: 1, name: 'Alice', active: true },
+            { id: 2, name: 'Bob', active: false }
+          ], null, 2),
+          'config.ini': '[postgresql]\nmax_connections = 100\nshared_buffers = 128MB'
+        }
+      },
+      {
+        name: 'web-assets',
+        driver: 'local',
+        scope: 'local',
+        created: new Date().toISOString(),
+        files: {
+          'widget.js': '// Client UI elements widget\nconsole.log("widget connected");',
+          'styles-extra.css': 'body { background: #000; }'
+        }
+      }
+    ];
+    this.volumes.set(defaultVolumes);
+
+    // 2. Default Networks
+    const defaultNetworks: DockerNetwork[] = [
+      { id: 'n1', name: 'bridge', driver: 'bridge', subnet: '172.17.0.0/16', gateway: '172.17.0.1', containers: [] },
+      { id: 'n2', name: 'host', driver: 'host', subnet: '0.0.0.0/0', gateway: '0.0.0.0', containers: [] },
+      { id: 'n3', name: 'none', driver: 'none', subnet: '', gateway: '', containers: [] }
+    ];
+    this.networks.set(defaultNetworks);
+
+    // 3. Built-in Base Images
+    const baseImages: DockerImage[] = [
+      {
+        id: 'img-nginx-alpine',
+        tag: 'nginx:alpine',
+        size: '23.4 MB',
+        created: '12 days ago',
+        isPrebuilt: true,
+        layers: ['FROM alpine:3.18', 'RUN apk add --no-cache nginx', 'COPY index.html /usr/share/nginx/html/', 'EXPOSE 80', 'CMD ["nginx", "-g", "daemon off;"]'],
+        dockerfile: '# Prebuilt Official Nginx Image\nFROM alpine:3.18\nRUN apk add --no-cache nginx\nEXPOSE 80\nCMD ["nginx", "-g", "daemon off;"]',
+        env: { PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
+        workdir: '/',
+        ports: [80],
+        cmd: 'nginx -g daemon off;',
+        filesystem: {
+          '/': { type: 'dir' },
+          '/usr': { type: 'dir' },
+          '/usr/share': { type: 'dir' },
+          '/usr/share/nginx': { type: 'dir' },
+          '/usr/share/nginx/html': { type: 'dir' },
+          '/usr/share/nginx/html/index.html': {
+            type: 'file',
+            content: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Welcome to Nginx!</title>
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; padding: 4rem; text-align: center; }
+    h1 { color: #38bdf8; font-size: 2.5rem; font-weight: 600; margin-bottom: 1rem; }
+    p { color: #94a3b8; line-height: 1.6; max-width: 500px; margin: 0 auto 1.5rem; }
+    .badge { background-color: #0369a1; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.85rem; display: inline-block; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>🐳 Docker-Nginx Connected</h1>
+  <p>Your simulated container is serving web assets flawlessly inside this local network bridge!</p>
+  <div class="badge">IP: 172.17.0.2 | Port: 80</div>
+</body>
+</html>`
+          },
+          '/etc': { type: 'dir' },
+          '/etc/nginx': { type: 'dir' },
+          '/etc/nginx/nginx.conf': { type: 'file', content: '# Nginx standard config\nevents { worker_connections 1024; }\nhttp {\n  server {\n    listen 80;\n    root /usr/share/nginx/html;\n  }\n}' },
+          '/bin': { type: 'dir' },
+          '/bin/sh': { type: 'file', content: '# Shell executable' }
+        }
+      },
+      {
+        id: 'img-node-alpine',
+        tag: 'node:18-alpine',
+        size: '122.1 MB',
+        created: '3 weeks ago',
+        isPrebuilt: true,
+        layers: ['FROM alpine:3.18', 'RUN apk add --no-cache nodejs npm', 'WORKDIR /app', 'EXPOSE 3000'],
+        dockerfile: '# Prebuilt Node.js Sandbox\nFROM alpine:3.18\nRUN apk add --no-cache nodejs npm\nWORKDIR /app',
+        env: { NODE_ENV: 'development', PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
+        workdir: '/app',
+        ports: [3000],
+        cmd: 'node',
+        filesystem: {
+          '/': { type: 'dir' },
+          '/app': { type: 'dir' },
+          '/app/package.json': {
+            type: 'file',
+            content: JSON.stringify({
+              name: "docker-node-api",
+              version: "1.0.0",
+              main: "app.js",
+              dependencies: { express: "^4.18.2" }
+            }, null, 2)
+          },
+          '/app/app.js': {
+            type: 'file',
+            content: `const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.json({
+    engine: "node-express",
+    uptime: process.uptime(),
+    host: "Simulated-Node-Container",
+    status: "Healthy",
+    time: new Date().toISOString(),
+    env: process.env.NODE_ENV || 'development',
+    features: ["Virtual DNS", "Bridge Routing", "Cross-Container Fetch", "Dynamic Memory Persistence"]
+  });
+});
+
+app.listen(PORT, () => {
+  console.log('⚡ Node.js API Service booted inside Container on port ' + PORT);
+});`
+          },
+          '/usr': { type: 'dir' },
+          '/usr/bin': { type: 'dir' },
+          '/usr/bin/node': { type: 'file', content: '# Simulated NodeJS Interpreter' },
+          '/usr/bin/npm': { type: 'file', content: '# Simulated Node Package Manager' },
+          '/bin': { type: 'dir' },
+          '/bin/sh': { type: 'file', content: '# Shell executable' }
+        }
+      },
+      {
+        id: 'img-postgres-alpine',
+        tag: 'postgres:15-alpine',
+        size: '228.4 MB',
+        created: '1 month ago',
+        isPrebuilt: true,
+        layers: ['FROM alpine:3.18', 'RUN apk add --no-cache postgresql', 'ENV PGUSER=postgres', 'EXPOSE 5432', 'VOLUME /var/lib/postgresql/data'],
+        dockerfile: '# PostgreSQL alpine prebuilt\nFROM alpine:3.18\nRUN apk add postgresql\nENV PGUSER=postgres\nEXPOSE 5432',
+        env: { PGDATA: '/var/lib/postgresql/data', PGUSER: 'postgres', POSTGRES_DB: 'dock_db' },
+        workdir: '/var/lib/postgresql',
+        ports: [5432],
+        cmd: 'postgres',
+        filesystem: {
+          '/': { type: 'dir' },
+          '/var': { type: 'dir' },
+          '/var/lib': { type: 'dir' },
+          '/var/lib/postgresql': { type: 'dir' },
+          '/var/lib/postgresql/data': { type: 'dir' },
+          '/usr/bin': { type: 'dir' },
+          '/usr/bin/postgres': { type: 'file', content: '# Postgres engine binary' },
+          '/bin/sh': { type: 'file', content: '# Shell executable' }
+        }
+      },
+      {
+        id: 'img-python-slim',
+        tag: 'python:3.10-slim',
+        size: '115.0 MB',
+        created: '2 months ago',
+        isPrebuilt: true,
+        layers: ['FROM debian:bookworm-slim', 'RUN apt-get update && apt-get install -y python3', 'EXPOSE 8000'],
+        dockerfile: '# Prebuilt Python Interpreter\nFROM debian:bookworm-slim\nRUN apt-get update && apt-get install python3\nEXPOSE 8000',
+        env: { PYTHONUNBUFFERED: '1' },
+        workdir: '/',
+        ports: [8000],
+        cmd: 'python3 -m http.server 8000',
+        filesystem: {
+          '/': { type: 'dir' },
+          '/app': { type: 'dir' },
+          '/app/main.py': {
+            type: 'file',
+            content: `import sys\nimport time\n\nprint("🐍 Starting Simulated Python Server...")\nprint("Python version:", sys.version)\nwhile True:\n    print("Tick:", time.time())\n    time.sleep(10)`
+          },
+          '/usr/bin': { type: 'dir' },
+          '/usr/bin/python3': { type: 'file', content: '# Python runtime executable' },
+          '/bin/sh': { type: 'file', content: '# Shell executable' }
+        }
+      }
+    ];
+    this.images.set(baseImages);
+
+    // 4. Default Running Containers
+    const defaultContainers: DockerContainer[] = [
+      {
+        id: 'c8cf2e176b91',
+        name: 'web-nginx',
+        imageId: 'img-nginx-alpine',
+        imageTag: 'nginx:alpine',
+        status: 'running',
+        exitCode: 0,
+        created: new Date().toISOString(),
+        ports: { 8080: 80 },
+        ipAddress: '172.17.0.2',
+        network: 'bridge',
+        env: { PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
+        workdir: '/',
+        currentWorkdir: '/usr/share/nginx/html',
+        volumes: [],
+        stats: { cpu: 0.1, memory: 14.8, memoryLimit: 512, netIn: 1.4, netOut: 24.5 },
+        logs: [
+          { stream: 'system', text: 'Initializing worker processes...', time: new Date().toISOString() },
+          { stream: 'stdout', text: '[notice] 1#1: using the "epoll" event method', time: new Date().toISOString() },
+          { stream: 'stdout', text: '[notice] 1#1: nginx/1.25.1', time: new Date().toISOString() },
+          { stream: 'stdout', text: '[notice] 1#1: built by gcc 12.2.1', time: new Date().toISOString() },
+          { stream: 'stdout', text: '[notice] 1#1: start worker process 32', time: new Date().toISOString() },
+          { stream: 'stdout', text: 'nginx is running and listening on port 80 🚀', time: new Date().toISOString() }
+        ],
+        filesystem: JSON.parse(JSON.stringify(baseImages[0].filesystem)),
+        history: [],
+        cmd: 'nginx -g daemon off;'
+      },
+      {
+        id: 'fa821cd35189',
+        name: 'api-service',
+        imageId: 'img-node-alpine',
+        imageTag: 'node:18-alpine',
+        status: 'running',
+        exitCode: 0,
+        created: new Date().toISOString(),
+        ports: { 3000: 3000 },
+        ipAddress: '172.17.0.3',
+        network: 'bridge',
+        env: { NODE_ENV: 'production', PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
+        workdir: '/app',
+        currentWorkdir: '/app',
+        volumes: [],
+        stats: { cpu: 1.2, memory: 44.2, memoryLimit: 1024, netIn: 12.8, netOut: 112.4 },
+        logs: [
+          { stream: 'system', text: 'Booting Node environment...', time: new Date().toISOString() },
+          { stream: 'stdout', text: '> docker-node-api@1.0.0 start', time: new Date().toISOString() },
+          { stream: 'stdout', text: '> node app.js', time: new Date().toISOString() },
+          { stream: 'stdout', text: '⚡ Node.js API Service booted inside Container on port 3000', time: new Date().toISOString() }
+        ],
+        filesystem: JSON.parse(JSON.stringify(baseImages[1].filesystem)),
+        history: [],
+        cmd: 'node app.js'
+      }
+    ];
+
+    // Connect them in networks
+    defaultNetworks[0].containers.push('c8cf2e176b91', 'fa821cd35189');
+
+    this.containers.set(defaultContainers);
+
+    // Pick first image for launching form default
+    this.launchForm.patchValue({
+      image: baseImages[0].id
+    });
+  }
+
+  // Swap default Dockerfiles based on sidebar click
+  loadTemplateDockerfile(template: string) {
+    if (template === 'node') {
+      this.dockerfileInput.set(`FROM node:18-alpine
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY . .
+ENV PORT=3000
+EXPOSE 3000
+CMD ["node", "app.js"]`);
+      this.newImageTag.setValue('my-node-service:latest');
+    } else if (template === 'nginx') {
+      this.dockerfileInput.set(`FROM nginx:alpine
+COPY . /usr/share/nginx/html/
+ENV CACHE_HOURS=24
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]`);
+      this.newImageTag.setValue('my-nginx-web:latest');
+    } else if (template === 'postgres') {
+      this.dockerfileInput.set(`FROM postgres:15-alpine
+ENV POSTGRES_DB=dev_db
+ENV POSTGRES_PASSWORD=adminpwd
+VOLUME /var/lib/postgresql/data
+EXPOSE 5432
+CMD ["postgres"]`);
+      this.newImageTag.setValue('my-database:latest');
+    } else if (template === 'python') {
+      this.dockerfileInput.set(`FROM python:3.10-slim
+WORKDIR /server
+COPY app.py ./
+ENV ENV_MODE=production
+EXPOSE 8000
+CMD ["python3", "-m", "http.server", "8000"]`);
+      this.newImageTag.setValue('my-py-server:latest');
+    }
+  }
+
+  // --- Statistics simulation interval loop ---
+  private startSimulationTick() {
+    this.stateTimer = setInterval(() => {
+      this.containers.update(currentArr => {
+        return currentArr.map(container => {
+          if (container.status !== 'running') {
+            return {
+              ...container,
+              stats: { cpu: 0, memory: 0, memoryLimit: container.stats.memoryLimit, netIn: container.stats.netIn, netOut: container.stats.netOut }
+            };
+          }
+          // Random walk stats update
+          const seedBase = container.imageTag.includes('nginx') ? 0.3 : 2.5;
+          const cpuDelta = (Math.random() - 0.5) * 0.4 + seedBase * 0.05;
+          const targetCpu = Math.max(0.05, Math.min(65.0, container.stats.cpu + cpuDelta));
+
+          const memoryDelta = (Math.random() - 0.5) * 1.5;
+          const targetMem = Math.max(4.0, Math.min(container.stats.memoryLimit, container.stats.memory + memoryDelta));
+
+          const randomReq = Math.random() > 0.6;
+          const netInDelta = randomReq ? Math.floor(Math.random() * 8) : 0;
+          const netOutDelta = randomReq ? Math.floor(Math.random() * 45) : 0;
+
+          // Add simple logging sometimes if container is active to mock output activity
+          const updatedLogs = [...container.logs];
+          if (randomReq && container.imageTag.includes('nginx') && Math.random() > 0.8) {
+            const pathOption = ['/', '/api/items', '/dist/bundle.js', '/favicon.ico'];
+            const randomPath = pathOption[Math.floor(Math.random() * pathOption.length)];
+            const remoteHost = `172.17.0.${Math.round(Math.random() * 4 + 1)}`;
+            const timestamp = new Date().toISOString();
+            updatedLogs.push({
+              stream: 'stdout',
+              text: `${remoteHost} - - [${new Date().toLocaleDateString()}] "GET ${randomPath} HTTP/1.1" 200 ${Math.round(Math.random() * 1200 + 400)}`,
+              time: timestamp
+            });
+            // cap logs length max 100 for safety
+            if (updatedLogs.length > 80) updatedLogs.shift();
+          }
+
+          return {
+            ...container,
+            stats: {
+              cpu: parseFloat(targetCpu.toFixed(1)),
+              memory: parseFloat(targetMem.toFixed(1)),
+              memoryLimit: container.stats.memoryLimit,
+              netIn: container.stats.netIn + netInDelta,
+              netOut: container.stats.netOut + netOutDelta
+            },
+            logs: updatedLogs
+          };
+        });
+      });
+    }, 1200);
+  }
+
+  // --- Helper: Simulate filesystem directory details ---
+  getFilesInDirectory(container: DockerContainer, dirPath: string): { name: string; type: 'file' | 'dir'; size?: string }[] {
+    const fs = container.filesystem;
+    const normDir = dirPath === '/' ? '/' : (dirPath.endsWith('/') ? dirPath : dirPath + '/');
+    const filesList: { name: string; type: 'file' | 'dir'; size?: string }[] = [];
+    const directChildren = new Set<string>();
+
+    for (const p of Object.keys(fs)) {
+      if (p === dirPath) continue;
+      
+      const inDir = dirPath === '/' 
+        ? p.startsWith('/') && p.slice(1).split('/').length === 1
+        : p.startsWith(normDir) && p.slice(normDir.length).split('/').length === 1;
+
+      if (inDir) {
+        const name = dirPath === '/' ? p.substring(1) : p.substring(normDir.length);
+        if (name) {
+          filesList.push({
+            name,
+            type: fs[p].type,
+            size: fs[p].type === 'file' ? `${(fs[p].content?.length || 0) + 12} B` : undefined
+          });
+          directChildren.add(name);
+        }
+      } else if (p.startsWith(normDir)) {
+        // Nested subdirectories
+        const remainder = p.substring(normDir.length);
+        const firstPart = remainder.split('/')[0];
+        if (firstPart && !directChildren.has(firstPart)) {
+          filesList.push({
+            name: firstPart,
+            type: 'dir'
+          });
+          directChildren.add(firstPart);
+        }
+      }
+    }
+    return filesList.sort((a,b) => (b.type === 'dir' ? 1 : 0) - (a.type === 'dir' ? 1 : 0) || a.name.localeCompare(b.name));
+  }
+
+  // --- Simulated Container Engine Actions ---
+  toggleContainer(containerId: string) {
+    this.containers.update(list => list.map(c => {
+      if (c.id === containerId) {
+        const newStatus = c.status === 'running' ? 'stopped' : 'running';
+        const timestamp = new Date().toISOString();
+        const logs = [...c.logs];
+        logs.push({
+          stream: 'system',
+          text: newStatus === 'running' 
+            ? `container started successfully: command '${c.cmd}'` 
+            : `container stopped peacefully.`,
+          time: timestamp
+        });
+        return {
+          ...c,
+          status: newStatus,
+          logs
+        };
+      }
+      return c;
+    }));
+  }
+
+  restartContainer(containerId: string) {
+    this.containers.update(list => list.map(c => {
+      if (c.id === containerId) {
+        const timestamp = new Date().toISOString();
+        const logs = [...c.logs];
+        logs.push(
+          { stream: 'system', text: `sending SIGTERM to container processes...`, time: timestamp },
+          { stream: 'system', text: `restarting container cleanly...`, time: timestamp },
+          { stream: 'stdout', text: `reboot successful!`, time: timestamp }
+        );
+        return {
+          ...c,
+          status: 'running',
+          logs
+        };
+      }
+      return c;
+    }));
+  }
+
+  deleteContainer(containerId: string) {
+    const activeTerm = this.terminalContainer();
+    if (activeTerm?.id === containerId) this.terminalContainer.set(null);
+    const activeLog = this.logsContainer();
+    if (activeLog?.id === containerId) this.logsContainer.set(null);
+
+    this.containers.update(list => list.filter(c => c.id !== containerId));
+    
+    // Disconnect container from network registry mapping
+    this.networks.update(nets => nets.map(net => ({
+      ...net,
+      containers: net.containers.filter(id => id !== containerId)
+    })));
+  }
+
+  // Launch simulated container using Launch Form settings
+  launchContainer() {
+    if (this.launchForm.invalid) return;
+
+    const data = this.launchForm.value;
+    const selectedImageId = data.image;
+    const image = this.images().find(img => img.id === selectedImageId);
+    if (!image) return;
+
+    // Build ID
+    const containerId = Math.random().toString(36).substring(2, 14);
+    
+    // Parse environment strings
+    const envObj = { ...image.env };
+    if (data.envString) {
+      data.envString.split(',').forEach((sub: string) => {
+        const [k, v] = sub.split('=');
+        if (k && v) envObj[k.trim()] = v.trim();
+      });
+    }
+
+    // Allocate random unique Container IP
+    const bridgeNet = this.networks().find(n => n.name === data.network);
+    const existingIps = this.containers().map(c => c.ipAddress);
+    let ip = '172.17.0.10';
+    if (bridgeNet && bridgeNet.subnet.startsWith('172.')) {
+      const subPrefix = bridgeNet.subnet.split('.').slice(0,3).join('.'); // e.g., 172.17.0
+      for (let i = 4; i < 254; i++) {
+        const candidateIp = `${subPrefix}.${i}`;
+        if (!existingIps.includes(candidateIp)) {
+          ip = candidateIp;
+          break;
+        }
+      }
+    }
+
+    // Capture volume mount configuration
+    const volumeMounts: VolumeMount[] = [];
+    const initialFS = JSON.parse(JSON.stringify(image.filesystem));
+
+    if (data.volumeName && data.volumeMountPath) {
+      volumeMounts.push({
+        volumeName: data.volumeName,
+        containerPath: data.volumeMountPath
+      });
+
+      // Synchronize initial files from DockerVolume host repository directory if it contains records
+      const hostVolume = this.volumes().find(v => v.name === data.volumeName);
+      if (hostVolume) {
+        // Ensure parent directories exist
+        const pathsToCreate = data.volumeMountPath.split('/').filter(Boolean);
+        let currPath = '';
+        pathsToCreate.forEach((p: string) => {
+          currPath += '/' + p;
+          if (!initialFS[currPath]) {
+            initialFS[currPath] = { type: 'dir' };
+          }
+        });
+
+        // Seed with volume files
+        Object.keys(hostVolume.files).forEach(fPath => {
+          const fullPath = data.volumeMountPath + (fPath.startsWith('/') ? fPath : '/' + fPath);
+          initialFS[fullPath] = {
+            type: 'file',
+            content: hostVolume.files[fPath]
+          };
+        });
+      }
+    }
+
+    const newContainer: DockerContainer = {
+      id: containerId,
+      name: data.name,
+      imageId: image.id,
+      imageTag: image.tag,
+      status: 'running',
+      exitCode: 0,
+      created: new Date().toISOString(),
+      ports: { [data.hostPort]: image.ports[0] || 80 },
+      ipAddress: ip,
+      network: data.network,
+      env: envObj,
+      workdir: image.workdir || '/',
+      currentWorkdir: image.workdir || '/',
+      volumes: volumeMounts,
+      stats: { cpu: 0.1, memory: 18.0, memoryLimit: 512, netIn: 0.1, netOut: 0.1 },
+      logs: [
+        { stream: 'system', text: `Container successfully provisioned with hostname '${data.name}'`, time: new Date().toISOString() },
+        { stream: 'system', text: `Assigned static subnet interface: ${ip}`, time: new Date().toISOString() },
+        { stream: 'system', text: `Publishing host port interface ${data.hostPort}:${image.ports[0] || 80}`, time: new Date().toISOString() },
+        { stream: 'system', text: `CMD target: [${image.cmd}]`, time: new Date().toISOString() },
+        { stream: 'stdout', text: `Initiating startup sequence for service on PID 1...`, time: new Date().toISOString() }
+      ],
+      filesystem: initialFS,
+      history: [],
+      cmd: image.cmd
+    };
+
+    // Auto append logs based on service tags
+    if (image.tag.includes('node')) {
+      newContainer.logs.push(
+        { stream: 'stdout', text: `⚡ Node.js API Service booted inside Container on port ${image.ports[0] || 3000}`, time: new Date().toISOString() }
+      );
+    } else if (image.tag.includes('nginx')) {
+      newContainer.logs.push(
+        { stream: 'stdout', text: `nginx is running and listening on port ${image.ports[0] || 80} 🚀`, time: new Date().toISOString() }
+      );
+    } else if (image.tag.includes('postgres')) {
+      newContainer.logs.push(
+        { stream: 'stdout', text: `2026-06-22 14:43:55.105 UTC [1] LOG: database system is ready to accept connections`, time: new Date().toISOString() }
+      );
+    }
+
+    // Append to Docker Containers Store
+    this.containers.update(list => [...list, newContainer]);
+
+    // Append network container index pointer
+    this.networks.update(nets => nets.map(net => {
+      if (net.name === data.network) {
+        return { ...net, containers: [...net.containers, containerId] };
+      }
+      return net;
+    }));
+
+    // Reset Form Fields with randomized clean variables
+    this.launchForm.reset({
+      name: 'service-' + Math.floor(Math.random() * 900 + 100),
+      image: selectedImageId,
+      hostPort: Math.floor(Math.random() * 4000 + 4000),
+      network: 'bridge',
+      envString: 'NODE_ENV=production',
+      volumeName: '',
+      volumeMountPath: ''
+    });
+
+    // Automatically navigate view panel back to Containers lists
+    this.activeTab.set('containers');
+  }
+
+  // --- VOLUME CREATION ENGINE ---
+  createVolume() {
+    if (this.volumeForm.invalid) return;
+    const data = this.volumeForm.value;
+
+    const volumeExists = this.volumes().some(v => v.name === data.name);
+    if (volumeExists) {
+      alert(`Volume of name ${data.name} already exists.`);
+      return;
+    }
+
+    const newVolume: DockerVolume = {
+      name: data.name,
+      driver: data.driver || 'local',
+      scope: 'local',
+      created: new Date().toISOString(),
+      files: {
+        'metadata.json': JSON.stringify({ description: "Persistent client store database folder", files: 0 }, null, 2)
+      }
+    };
+
+    this.volumes.update(arr => [...arr, newVolume]);
+    this.volumeForm.reset({
+      name: '',
+      driver: 'local'
+    });
+  }
+
+  deleteVolume(volName: string) {
+    this.volumes.update(arr => arr.filter(v => v.name !== volName));
+  }
+
+  // --- NETWORK CREATION ENGINE ---
+  createNetwork() {
+    if (this.networkForm.invalid) return;
+    const data = this.networkForm.value;
+
+    const netExists = this.networks().some(n => n.name === data.name);
+    if (netExists) {
+      alert(`Network of name ${data.name} already exists.`);
+      return;
+    }
+
+    // Determine random Gateway IP for the subnet
+    const ipParts = data.subnet.split('.');
+    const gatewayIp = `${ipParts[0]}.${ipParts[1]}.0.1`;
+
+    const newNet: DockerNetwork = {
+      id: 'net-' + Math.random().toString(36).substring(2, 8),
+      name: data.name,
+      driver: data.driver || 'bridge',
+      subnet: data.subnet,
+      gateway: gatewayIp,
+      containers: []
+    };
+
+    this.networks.update(arr => [...arr, newNet]);
+    this.networkForm.reset({
+      name: '',
+      driver: 'bridge',
+      subnet: '172.22.0.0/16'
+    });
+  }
+
+  deleteNetwork(netId: string) {
+    const netObj = this.networks().find(n => n.id === netId);
+    if (netObj && ['bridge', 'host', 'none'].includes(netObj.name)) {
+      alert("Cannot delete standard default configurations.");
+      return;
+    }
+    this.networks.update(arr => arr.filter(n => n.id !== netId));
+  }
+
+  // --- DRAG-AND-DROP NETWORK TOPOLOGY CONTROLS ---
+  draggedContainerId = signal<string | null>(null);
+  activeDropTargetNetworkId = signal<string | null>(null);
+
+  onContainerDragStart(event: DragEvent, containerId: string) {
+    this.draggedContainerId.set(containerId);
+    if (event.dataTransfer) {
+      event.dataTransfer.setData('text/plain', containerId);
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  onContainerDragEnd() {
+    this.draggedContainerId.set(null);
+    this.activeDropTargetNetworkId.set(null);
+  }
+
+  onNetworkDragOver(event: DragEvent, networkId: string) {
+    event.preventDefault();
+    if (this.draggedContainerId() && this.activeDropTargetNetworkId() !== networkId) {
+      this.activeDropTargetNetworkId.set(networkId);
+    }
+  }
+
+  onNetworkDragLeave() {
+    this.activeDropTargetNetworkId.set(null);
+  }
+
+  onNetworkDrop(event: DragEvent, targetNetworkName: string) {
+    event.preventDefault();
+    const containerId = event.dataTransfer?.getData('text/plain') || this.draggedContainerId();
+    if (containerId) {
+      this.moveContainerToNetwork(containerId, targetNetworkName);
+    }
+    this.draggedContainerId.set(null);
+    this.activeDropTargetNetworkId.set(null);
+  }
+
+  moveContainerToNetwork(containerId: string, targetNetworkName: string) {
+    const container = this.containers().find(c => c.id === containerId);
+    if (!container) return;
+
+    if (container.network === targetNetworkName) {
+      return; // Already in this network
+    }
+
+    const targetNet = this.networks().find(n => n.name === targetNetworkName);
+    if (!targetNet) return;
+
+    const oldNetworkName = container.network;
+
+    // Generate new IP address conformant to target subnet
+    const existingIps = this.containers().map(c => c.ipAddress);
+    let newIp = '172.17.0.10';
+    if (targetNet.subnet && targetNet.subnet.startsWith('172.')) {
+      const subPrefix = targetNet.subnet.split('.').slice(0, 3).join('.');
+      for (let i = 4; i < 254; i++) {
+        const candidateIp = `${subPrefix}.${i}`;
+        if (!existingIps.includes(candidateIp)) {
+          newIp = candidateIp;
+          break;
+        }
+      }
+    } else {
+      const randSegment = Math.floor(Math.random() * 80 + 18);
+      newIp = `172.${randSegment}.0.${Math.floor(Math.random() * 200 + 4)}`;
+    }
+
+    // Update container signal
+    this.containers.update(list => list.map(c => {
+      if (c.id === containerId) {
+        const updatedLogs = [
+          ...c.logs,
+          {
+            stream: 'system' as const,
+            text: `[DOCKER NETWORK ROUTER] Migrated network bridge interface from '${oldNetworkName}' to '${targetNetworkName}'`,
+            time: new Date().toISOString()
+          },
+          {
+            stream: 'system' as const,
+            text: `Allocated route IP endpoint: ${newIp}`,
+            time: new Date().toISOString()
+          }
+        ];
+        return {
+          ...c,
+          network: targetNetworkName,
+          ipAddress: newIp,
+          logs: updatedLogs
+        };
+      }
+      return c;
+    }));
+
+    // Update networks signal
+    this.networks.update(nets => nets.map(net => {
+      let nextContainers = net.containers || [];
+      if (net.name === oldNetworkName) {
+        nextContainers = nextContainers.filter(id => id !== containerId);
+      }
+      if (net.name === targetNetworkName) {
+        if (!nextContainers.includes(containerId)) {
+          nextContainers = [...nextContainers, containerId];
+        }
+      }
+      return { ...net, containers: nextContainers };
+    }));
+  }
+
+  // --- DOCKERFILE PARSING & BUILDING (STEPPED SIMULATOR) ---
+  simulateBuild() {
+    if (this.isBuilding()) return;
+
+    const tag = this.newImageTag.value;
+    if (!tag) {
+      this.buildLogs.set(['🔴 Error: Please specify a target tag (e.g., node-app:latest)']);
+      return;
+    }
+
+    this.isBuilding.set(true);
+    this.buildProgress.set(5);
+    this.buildLogs.set([
+      `Sending build context to Docker daemon  3.584 kB`,
+      `[Docker Daemon Engine] Parsing local multi-stage instructions...`,
+      `[Docker Cache System] Evaluating layer dependency hashes...`
+    ]);
+
+    // Parse main lines from Editor signal, ignoring empty links and comment lines
+    const dockerfileRaw = this.dockerfileInput();
+    const cleanLines = dockerfileRaw.split('\n')
+      .map(l => l.trim())
+      .filter(line => line !== '' && !line.startsWith('#'));
+
+    const cacheEvaluation = this.cacheService.evaluateDockerfileCache(dockerfileRaw);
+
+    let progressIter = 0;
+    const executeStep = () => {
+      if (progressIter >= cleanLines.length) {
+        // Build completed! Create actual DockerImage record!
+        const imageId = 'img-' + Math.random().toString(36).substring(2, 10);
+        
+        // Form custom environment variables compiled from the Dockerfile
+        const compiledEnv: Record<string, string> = {};
+        const exposedPorts: number[] = [];
+        let cmdStr = 'node';
+        let customWorkdir = '/';
+
+        // Mock simple filesystem output for Dockerfile custom directories
+        const mockFS: FileSystem = {
+          '/': { type: 'dir' }
+        };
+
+        cleanLines.forEach(inst => {
+          if (inst.startsWith('ENV ')) {
+            const body = inst.substring(4).trim();
+            const equalIndex = body.indexOf('=');
+            if (equalIndex > 0) {
+              const k = body.substring(0, equalIndex).trim();
+              const v = body.substring(equalIndex + 1).trim();
+              compiledEnv[k] = v;
+            } else {
+              const parts = body.split(/\s+/);
+              if (parts[0]) compiledEnv[parts[0]] = parts.slice(1).join(' ');
+            }
+          } else if (inst.startsWith('EXPOSE ')) {
+            const portNum = parseInt(inst.substring(7).trim());
+            if (!isNaN(portNum)) exposedPorts.push(portNum);
+          } else if (inst.startsWith('CMD ')) {
+            cmdStr = inst.substring(4).trim();
+            // clean brackets
+            cmdStr = cmdStr.replace('[', '').replace(']', '').replace(/"/g, '').replace(/,/g, ' ');
+          } else if (inst.startsWith('WORKDIR ')) {
+            customWorkdir = inst.substring(8).trim();
+            mockFS[customWorkdir] = { type: 'dir' };
+          }
+        });
+
+        // Seed basic contents
+        mockFS[customWorkdir + '/package.json'] = {
+          type: 'file',
+          content: '{\n  "name": "custom-compiled-docker",\n  "status": "compiled-from-scratch"\n}'
+        };
+        mockFS[customWorkdir + '/app.js'] = {
+          type: 'file',
+          content: `console.log("Custom app listening on ports: ${exposedPorts.join(',') || 'none'}");`
+        };
+
+        const newImageObj: DockerImage = {
+          id: imageId,
+          tag: tag,
+          size: `${Math.round(Math.random() * 40 + 60)}.8 MB`,
+          created: 'Just now',
+          isPrebuilt: false,
+          layers: cleanLines,
+          dockerfile: dockerfileRaw,
+          env: compiledEnv,
+          workdir: customWorkdir,
+          ports: exposedPorts.length > 0 ? exposedPorts : [3000],
+          cmd: cmdStr,
+          filesystem: mockFS
+        };
+
+        this.images.update(arr => [...arr, newImageObj]);
+
+        // Register build to update cache statistics
+        const report = this.cacheService.registerBuildAndFlushCache(imageId, tag, dockerfileRaw, cleanLines);
+
+        // Auto selection in launching container
+        this.launchForm.patchValue({ image: imageId });
+
+        this.buildLogs.update(logsArr => [
+          ...logsArr,
+          `Removing intermediate container daemon...`,
+          ` ---> Successfully built ${imageId.replace('img-', '')}`,
+          ` ---> Successfully tagged ${tag}`,
+          ` ---> Cache Savings: ${report.cachedLayersCount} of ${report.totalLayers} layers hit (${Math.round((report.cachedLayersCount / report.totalLayers) * 100)}% Cache rate)`,
+          ` ---> Size Saved: ${report.sizeSavedMb} MB | Estimated build-time saved: ${report.timeSavedSeconds}s`,
+          `🟢 Build completed successfully!`
+        ]);
+        this.buildProgress.set(100);
+        this.isBuilding.set(false);
+        return;
+      }
+
+      const instruction = cleanLines[progressIter];
+      const stepIndex = progressIter + 1;
+      const stepLogs: string[] = [];
+      const cacheStatus = cacheEvaluation[progressIter];
+
+      this.buildProgress.set(Math.round(((stepIndex - 0.5) / cleanLines.length) * 100));
+
+      if (instruction.startsWith('FROM ')) {
+        const baseName = instruction.substring(5).trim();
+        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : FROM ${baseName}`);
+      } else if (instruction.startsWith('WORKDIR ')) {
+        const path = instruction.substring(8).trim();
+        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : WORKDIR ${path}`);
+      } else if (instruction.startsWith('RUN ')) {
+        const cmd = instruction.substring(4).trim();
+        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : RUN ${cmd}`);
+      } else if (instruction.startsWith('COPY ')) {
+        const payload = instruction.substring(5).trim();
+        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : COPY ${payload}`);
+      } else if (instruction.startsWith('EXPOSE ')) {
+        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : EXPOSE ${instruction.substring(7)}`);
+      } else {
+        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : ${instruction}`);
+      }
+
+      // Check for cache hit
+      const isCacheHit = cacheStatus && cacheStatus.status === 'hit';
+
+      if (isCacheHit) {
+        stepLogs.push(` ---> Using cache`);
+        stepLogs.push(` ---> Layer hash: ${cacheStatus.hash}`);
+        if (cacheStatus.cachedFromImageTag) {
+          stepLogs.push(` ---> Retained context from previous build of: ${cacheStatus.cachedFromImageTag}`);
+        }
+      } else {
+        if (instruction.startsWith('FROM ')) {
+          stepLogs.push(` ---> Pulling image layers from secure library...`);
+          stepLogs.push(` ---> Layer [00a2bfcf]: Pull complete`);
+          stepLogs.push(` ---> Native checksum: sha256:d81347072c...`);
+        } else if (instruction.startsWith('WORKDIR ')) {
+          stepLogs.push(` ---> Creating partition filesytem mounts...`);
+          stepLogs.push(` ---> Working directory target linked`);
+        } else if (instruction.startsWith('RUN ')) {
+          const cmd = instruction.substring(4).trim();
+          if (cmd.includes('npm install')) {
+            stepLogs.push(` ---> Executing local node setup...`);
+            stepLogs.push(`npm info run package.json compile metadata`);
+            stepLogs.push(`added 18 packages in 0.81s`);
+          } else if (cmd.includes('apk add') || cmd.includes('apt-get')) {
+            stepLogs.push(` ---> Triggering apk registry download...`);
+            stepLogs.push(`fetch http://dl-cdn.alpinelinux.org/alpine/v3.18/main/x86_64/APKINDEX.tar.gz`);
+            stepLogs.push(`OK: 18 packages, size 3.4MB`);
+          } else {
+            stepLogs.push(` ---> Executing command: ${cmd}`);
+          }
+        } else if (instruction.startsWith('COPY ')) {
+          stepLogs.push(` ---> Mapping host project workspaces...`);
+        } else if (instruction.startsWith('EXPOSE ')) {
+          stepLogs.push(` ---> Registered published virtual daemon socket listener`);
+        } else {
+          stepLogs.push(` ---> Registered image manifest instruction`);
+        }
+
+        const stepId = Math.random().toString(16).substring(2, 10);
+        stepLogs.push(` ---> ${stepId}`);
+      }
+
+      this.buildLogs.update(logsArr => [...logsArr, ...stepLogs]);
+      progressIter++;
+
+      // If cache hit, build steps incredibly fast! 150ms instead of 1000ms delay.
+      const delay = isCacheHit ? 150 : 1000;
+      setTimeout(executeStep, delay);
+    };
+
+    // run line builder
+    setTimeout(executeStep, 1200);
+  }
+
+  deleteImage(imgId: string) {
+    const imgObj = this.images().find(img => img.id === imgId);
+    if (imgObj?.isPrebuilt) {
+      alert("Cannot delete prebuilt official Docker images.");
+      return;
+    }
+    this.images.update(arr => arr.filter(i => i.id !== imgId));
+  }
+
+  // --- REGISTRY WORKGROUND - PULLING STANDARD IMAGE ---
+  pullOfficialImage() {
+    if (this.isPulling()) return;
+    const name = this.pullImageName.value;
+    if (!name) return;
+
+    this.isPulling.set(true);
+    this.pullLogs.set([
+      `Using default tag: latest`,
+      `Pulling from library/${name.includes(':') ? name.split(':')[0] : name}`,
+      `9b1429811c7d: Pulling fs layer`,
+      `0d19de42b936: Pulling fs layer`
+    ]);
+
+    let step = 0;
+    const pullTick = () => {
+      if (step === 0) {
+        this.pullLogs.update(arr => [...arr, `9b1429811c7d: Downloading [===============>                                   ]  4.2MB/12.4MB`]);
+      } else if (step === 1) {
+        this.pullLogs.update(arr => [...arr, `9b1429811c7d: Download complete`, `0d19de42b936: Extracting [==================================================>]  1.2MB/1.2MB`]);
+      } else if (step === 2) {
+        this.pullLogs.update(arr => [
+          ...arr,
+          `0d19de42b936: Pull complete`,
+          `Digest: sha256:f12bf8e1e3b2b8c5a019dcfed9029910c2688b1cc96c2cf5ebcc3fcc25d0c732`,
+          `Status: Downloaded newer image for ${name}`,
+          `🟢 Successfully pulled image tag: ${name}`
+        ]);
+
+        // Add to images signal registry
+        const baseName = name.includes(':') ? name : `${name}:latest`;
+        const imageId = 'pull-' + Math.random().toString(36).substring(2, 10);
+        
+        const newPulledImage: DockerImage = {
+          id: imageId,
+          tag: baseName,
+          size: `${Math.round(Math.random() * 32 + 12)} MB`,
+          created: 'Just now pulled',
+          isPrebuilt: false,
+          layers: [`FROM ${baseName}`],
+          dockerfile: `# Pulled from remote repository\nFROM ${baseName}`,
+          env: { PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' },
+          workdir: '/',
+          ports: [80],
+          cmd: '/bin/sh',
+          filesystem: {
+            '/': { type: 'dir' },
+            '/bin': { type: 'dir' },
+            '/bin/sh': { type: 'file' }
+          }
+        };
+
+        this.images.update(list => [...list, newPulledImage]);
+        this.launchForm.patchValue({ image: imageId });
+        this.isPulling.set(false);
+        return;
+      }
+      step++;
+      setTimeout(pullTick, 1000);
+    };
+
+    setTimeout(pullTick, 1000);
+  }
+
+  // --- INTERACTIVE BROWSER POPUP SIMULATOR ---
+  // Demonstrates port forwarding of Docker perfectly to users!
+  launchLocalBrowser(container: DockerContainer, hostPort: number) {
+    this.webBrowserContainer.set(container);
+    this.webBrowserHostPort.set(hostPort);
+    
+    // Evaluate response body based on image type and filesystem
+    const targetPort = container.ports[hostPort] || 80;
+    const fs = container.filesystem;
+
+    if (container.imageTag.includes('nginx')) {
+      // Return file content in /usr/share/nginx/html/index.html
+      const file = fs['/usr/share/nginx/html/index.html'] || fs['/index.html'];
+      this.webBrowserContent.set(file?.content || '<h2>Welcome to nginx!</h2><p>Default server listening on port 80</p>');
+    } else if (container.imageTag.includes('node') || container.cmd.includes('node')) {
+      // Mock Express JSON response
+      this.webBrowserContent.set(`<pre style="background: #1e293b; color: #38bdf8; padding: 1.5rem; border-radius: 8px; font-family: monospace; overflow-x: auto;">
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Transfer-Encoding: chunked
+
+${JSON.stringify({
+  engine: "node-express-simulation",
+  running: true,
+  uptime: "420.52 seconds",
+  container_ip: container.ipAddress,
+  environment: container.env['NODE_ENV'] || 'development',
+  message: "⚡ Hello World from inside your custom built Express microservice!",
+  simulated_stats: {
+    cpu: container.stats.cpu + "%",
+    memory: container.stats.memory + " MB"
+  }
+}, null, 2)}
+</pre>`);
+    } else if (container.imageTag.includes('python')) {
+      // Simple directory listings standard of python http server
+      this.webBrowserContent.set(`<html>
+<head><title>Directory listing for /</title></head>
+<body style="font-family: monospace; padding: 2rem; background: #fafafa;">
+<h2>Directory listing for / inside container</h2>
+<hr>
+<ul>
+  <li><a href="#">app/</a></li>
+  <li><a href="#">bin/</a></li>
+  <li><a href="#">etc/</a></li>
+  <li><a href="#">usr/</a></li>
+  <li><a href="#">var/</a></li>
+</ul>
+<hr>
+<p>Simulated Python HTTP server listening on bridge port ${targetPort}</p>
+</body>
+</html>`);
+    } else {
+      // General HTTP index catch
+      this.webBrowserContent.set(`<div style="font-family: sans-serif; text-align: center; padding: 5rem 1rem; color: #64748b;">
+        <span class="material-icons" style="font-size: 3.5rem; color: #94a3b8; margin-bottom: 1rem;">settings_ethernet</span>
+        <h3 style="color: #475569; font-weight: 650;">Container TCP handshake successful</h3>
+        <p style="font-size: 0.95rem; line-height: 1.5; color: #94a3b8;">Container IP resolved at ${container.ipAddress}:${targetPort}. Service listening but did not send HTTP payload response.</p>
+      </div>`);
+    }
+  }
+
+  closeLocalBrowser() {
+    this.webBrowserContainer.set(null);
+    this.webBrowserHostPort.set(null);
+  }
+
+  // --- TERMINAL EXEC INTERCTIVE CONSOLE (BASH CLI SYSTEM) ---
+  openTerminal(container: DockerContainer) {
+    this.terminalContainer.set(container);
+    this.activeTab.set('containers');
+
+    // Seed terminal console header
+    this.termLines.set([
+      `Microsoft Linux Core (Container Shell [ID: ${container.id.substring(0,6)}])`,
+      `Default working directory: ${container.currentWorkdir}`,
+      `Type 'help' to review list of simulated Docker diagnostic tools.`,
+      `Host bridge loopback configured. Ping other container IP addresses to test bridge network routes.`,
+      ` `
+    ]);
+    this.termInput.setValue('');
+    setTimeout(() => this.scrollToTerminalBottom(), 100);
+  }
+
+  closeTerminal() {
+    this.terminalContainer.set(null);
+  }
+
+  executeTermCommand() {
+    const cmdInput = this.termInput.value?.trim();
+    if (!cmdInput) return;
+
+    const container = this.terminalContainer();
+    if (!container) return;
+
+    // Reset shell input
+    this.termInput.setValue('');
+
+    // Append standard command echo
+    const promptHeader = `# `;
+    this.termLines.update(arr => [...arr, `${promptHeader}${cmdInput}`]);
+
+    // Parse commands and parameters
+    const tokens = cmdInput.split(/\s+/);
+    const mainCmd = tokens[0].toLowerCase();
+    const args = tokens.slice(1);
+
+    // Command Router Logic
+    let responseLines: string[] = [];
+
+    switch (mainCmd) {
+      case 'help':
+        responseLines = [
+          `Simulated Shell Tools available inside image [${container.imageTag}]:`,
+          `  help                     Display helper tool catalog`,
+          `  ls [dir]                 List directory files`,
+          `  pwd                      Print active working path directory`,
+          `  cd <dir>                 Change active working location`,
+          `  cat <file>               Output contents of file`,
+          `  mkdir <dir>              Provision target directory`,
+          `  touch <file>             Ensure target empty file exists`,
+          `  echo "content" [> file]  Print text string or map content to file`,
+          `  env, printenv            Review active environment variables`,
+          `  ping <ip_or_name>        Interrogate bridge node ping path latencies`,
+          `  curl http://<ip>:<port>  Connect HTTP socket to target container IP subnet`,
+          `  df -h, free -m           Display memory limits and storage capacities`,
+          `  clear                    Flush terminal screen lines`
+        ];
+        break;
+
+      case 'clear':
+        this.termLines.set([]);
+        return;
+
+      case 'pwd':
+        responseLines = [container.currentWorkdir];
+        break;
+
+      case 'cd': {
+        const targetDir = args[0] || '/';
+        let resolvedPath = targetDir;
+        if (!targetDir.startsWith('/')) {
+          const current = container.currentWorkdir === '/' ? '' : container.currentWorkdir;
+          resolvedPath = `${current}/${targetDir}`;
+        }
+        // normalize dots and trailing slashes
+        resolvedPath = resolvedPath.replace(/\/\.\//g, '/').replace(/\/+/g, '/');
+        if (resolvedPath.endsWith('/') && resolvedPath.length > 1) {
+          resolvedPath = resolvedPath.slice(0, -1);
+        }
+
+        // Validate directories exist inside the file-system dictionary structure
+        const dirExists = container.filesystem[resolvedPath] && container.filesystem[resolvedPath].type === 'dir';
+        if (dirExists || resolvedPath === '/') {
+          // Update working directory state
+          container.currentWorkdir = resolvedPath === '' ? '/' : resolvedPath;
+          responseLines = [];
+        } else {
+          responseLines = [`cd: no such file or directory: ${targetDir}`];
+        }
+        break;
+      }
+
+      case 'ls': {
+        let lsTarget = args[0] || container.currentWorkdir;
+        if (!lsTarget.startsWith('/')) {
+          const current = container.currentWorkdir === '/' ? '' : container.currentWorkdir;
+          lsTarget = `${current}/${lsTarget}`;
+        }
+        lsTarget = lsTarget.replace(/\/+/g, '/');
+        if (lsTarget.endsWith('/') && lsTarget.length > 1) {
+          lsTarget = lsTarget.slice(0, -1);
+        }
+
+        const files = this.getFilesInDirectory(container, lsTarget);
+        if (files.length === 0) {
+          responseLines = [];
+        } else {
+          responseLines = [
+            files.map(f => f.type === 'dir' ? `\x1b[34m${f.name}/\x1b[0m` : f.name).join('   ')
+          ];
+        }
+        break;
+      }
+
+      case 'cat': {
+        const catTarget = args[0];
+        if (!catTarget) {
+          responseLines = [`cat: Please specify target file path`];
+          break;
+        }
+        let fullCatPath = catTarget;
+        if (!catTarget.startsWith('/')) {
+          const current = container.currentWorkdir === '/' ? '' : container.currentWorkdir;
+          fullCatPath = `${current}/${catTarget}`;
+        }
+        fullCatPath = fullCatPath.replace(/\/+/g, '/');
+
+        const fileRecord = container.filesystem[fullCatPath];
+        if (fileRecord && fileRecord.type === 'file') {
+          responseLines = (fileRecord.content || '').split('\n');
+        } else {
+          responseLines = [`cat: ${catTarget}: No such file or directory`];
+        }
+        break;
+      }
+
+      case 'touch': {
+        const touchFile = args[0];
+        if (!touchFile) {
+          responseLines = [`touch: target file operand is required`];
+          break;
+        }
+        let fullTouchPath = touchFile;
+        if (!touchFile.startsWith('/')) {
+          const current = container.currentWorkdir === '/' ? '' : container.currentWorkdir;
+          fullTouchPath = `${current}/${touchFile}`;
+        }
+        fullTouchPath = fullTouchPath.replace(/\/+/g, '/');
+
+        container.filesystem[fullTouchPath] = {
+          type: 'file',
+          content: '',
+          size: 0
+        };
+        this.syncVolumeMount(container, fullTouchPath, '');
+        responseLines = [];
+        break;
+      }
+
+      case 'mkdir': {
+        const newDir = args[0];
+        if (!newDir) {
+          responseLines = [`mkdir: directory path is required`];
+          break;
+        }
+        let fullDirPath = newDir;
+        if (!newDir.startsWith('/')) {
+          const current = container.currentWorkdir === '/' ? '' : container.currentWorkdir;
+          fullDirPath = `${current}/${newDir}`;
+        }
+        fullDirPath = fullDirPath.replace(/\/+/g, '/');
+
+        container.filesystem[fullDirPath] = { type: 'dir' };
+        responseLines = [];
+        break;
+      }
+
+      case 'echo': {
+        const echoInput = args.join(' ');
+        // Check for redirects > or >>
+        const rIndex = echoInput.indexOf('>');
+        if (rIndex > 0) {
+          const textRaw = echoInput.substring(0, rIndex).trim();
+          const remains = echoInput.substring(rIndex).trim();
+          const appendMode = remains.startsWith('>>');
+          const fileRaw = remains.replace(/>+/g, '').trim();
+
+          const textFinal = textRaw.replace(/^["']|["']$/g, ''); // strip quotes
+
+          if (!fileRaw) {
+            responseLines = [`bash: syntax error near unexpected token 'newline'`];
+            break;
+          }
+
+          let fullEchoPath = fileRaw;
+          if (!fileRaw.startsWith('/')) {
+            const current = container.currentWorkdir === '/' ? '' : container.currentWorkdir;
+            fullEchoPath = `${current}/${fileRaw}`;
+          }
+          fullEchoPath = fullEchoPath.replace(/\/+/g, '/');
+
+          let existingContent = '';
+          const prevFile = container.filesystem[fullEchoPath];
+          if (prevFile && prevFile.type === 'file') {
+            existingContent = prevFile.content || '';
+          }
+
+          const writtenContent = appendMode 
+            ? (existingContent ? existingContent + '\n' + textFinal : textFinal)
+            : textFinal;
+
+          container.filesystem[fullEchoPath] = {
+            type: 'file',
+            content: writtenContent,
+            size: writtenContent.length
+          };
+
+          this.syncVolumeMount(container, fullEchoPath, writtenContent);
+          responseLines = [];
+        } else {
+          // simple echo out
+          responseLines = [echoInput.replace(/^["']|["']$/g, '')];
+        }
+        break;
+      }
+
+      case 'env':
+      case 'printenv':
+        responseLines = Object.keys(container.env).map(k => `${k}=${container.env[k]}`);
+        break;
+
+      case 'df':
+        responseLines = [
+          `Filesystem           1K-blocks      Used Available Use% Mounted on`,
+          `/dev/vdb               8256884    184288   7653456   3% /`,
+          `tmpfs                   512000         0    512000   0% /dev`
+        ];
+        break;
+
+      case 'free':
+        responseLines = [
+          `               total        used        free      shared  buff/cache   available`,
+          `Mem:            ${container.stats.memoryLimit}          ${Math.round(container.stats.memory)}         ${Math.round(container.stats.memoryLimit - container.stats.memory)}           0          24         ${Math.round(container.stats.memoryLimit - container.stats.memory)}`
+        ];
+        break;
+
+      case 'ping': {
+        const dest = args[0];
+        if (!dest) {
+          responseLines = [`ping: target address is required`];
+          break;
+        }
+
+        // Try lookup matching container name or IP address inside active network bridge lists
+        const targetCont = this.containers().find(c => c.name === dest || c.ipAddress === dest);
+        if (targetCont) {
+          if (targetCont.status !== 'running') {
+            responseLines = [
+              `PING ${dest} (${targetCont.ipAddress}): 56 data bytes`,
+              `Request timeout for icmp_seq 0`,
+              `Request timeout for icmp_seq 1`,
+              `--- ${dest} ping statistics ---`,
+              `2 packets transmitted, 0 packets received, 100% packet loss`
+            ];
+          } else {
+            responseLines = [
+              `PING ${dest} (${targetCont.ipAddress}): 56 data bytes`,
+              `64 bytes from ${targetCont.ipAddress}: icmp_seq=1 ttl=64 time=0.042 ms`,
+              `64 bytes from ${targetCont.ipAddress}: icmp_seq=2 ttl=64 time=0.081 ms`,
+              `--- ${dest} ping statistics ---`,
+              `2 packets transmitted, 2 packets received, 0% packet loss, rtt min/avg/max = 0.042/0.061/0.081 ms`
+            ];
+          }
+        } else {
+          responseLines = [
+            `PING ${dest} (${dest}): 56 data bytes`,
+            `ping: sendto: Host is unreachable`,
+            `--- ${dest} ping statistics ---`,
+            `3 packets in route, 0 responses, 100% target fail`
+          ];
+        }
+        break;
+      }
+
+      case 'curl': {
+        const urlStr = args[0] || '';
+        if (!urlStr) {
+          responseLines = [`curl: target http URL is required (e.g., http://172.17.0.3)`];
+          break;
+        }
+        // strip http prefix and extract host/port details
+        const cleanedUrl = urlStr.replace('http://', '').replace('/', '');
+        const hostParts = cleanedUrl.split(':');
+        const hostNameIp = hostParts[0];
+        const hostPortNum = parseInt(hostParts[1] || '80');
+
+        const dnsNode = this.containers().find(c => c.name === hostNameIp || c.ipAddress === hostNameIp);
+        if (dnsNode) {
+          if (dnsNode.status !== 'running') {
+            responseLines = [`curl: (7) Failed to connect to ${hostNameIp} port ${hostPortNum}: Connection refused`];
+          } else {
+            const htmlContent = dnsNode.filesystem['/usr/share/nginx/html/index.html'] || dnsNode.filesystem['/index.html'] || dnsNode.filesystem['/app/app.js'];
+            responseLines = [
+              `* Executing DNS bridge handshake lookup *`,
+              `* Connecting successfully to host address tcp: [${dnsNode.ipAddress}:${hostPortNum}]`,
+              `< HTTP/1.1 200 OK`,
+              `< Content-Type: text/html`,
+              `< Content-Length: ${htmlContent?.content?.length || 100}`,
+              `< Server: Docker-Virtual-Router`,
+              ` `,
+              ...(htmlContent?.content || '').split('\n').slice(0, 15)
+            ];
+          }
+        } else {
+          responseLines = [
+            `curl: (6) Could not resolve host: ${hostNameIp}`
+          ];
+        }
+        break;
+      }
+
+      default:
+        responseLines = [`sh: command not found: ${mainCmd}`];
+        break;
+    }
+
+    this.termLines.update(arr => [...arr, ...responseLines, ' ']);
+    setTimeout(() => this.scrollToTerminalBottom(), 80);
+  }
+
+  // Auto mirror filesystem writes into matching DockerVolume drivers (Local Sync)
+  private syncVolumeMount(container: DockerContainer, filePath: string, newContent: string) {
+    container.volumes.forEach(mount => {
+      // Check if file path is within mounted path
+      if (filePath.startsWith(mount.containerPath)) {
+        // extract relative path inside volume
+        let relPath = filePath.substring(mount.containerPath.length);
+        if (relPath.startsWith('/')) relPath = relPath.slice(1);
+        if (!relPath) relPath = 'index.html';
+
+        this.volumes.update(arr => arr.map(vol => {
+          if (vol.name === mount.volumeName) {
+            const upFiles = { ...vol.files };
+            upFiles[relPath] = newContent;
+            return {
+              ...vol,
+              files: upFiles
+            };
+          }
+          return vol;
+        }));
+      }
+    });
+  }
+
+  scrollToTerminalBottom() {
+    if (this.terminalBox) {
+      try {
+        const el = this.terminalBox.nativeElement;
+        el.scrollTop = el.scrollHeight;
+      } catch {
+        void 0; // Safe no-op to satisfy empty block rule
+      }
+    }
+  }
+
+  openLogsPanel(container: DockerContainer) {
+    this.logsContainer.set(container);
+  }
+
+  closeLogsPanel() {
+    this.logsContainer.set(null);
+  }
+
+  // --- AI DOCKER COPILOT - CALL BACKEND GEMINI API ---
+  async askCopilot() {
+    const prompt = this.copilotInput.value?.trim();
+    if (!prompt || this.copilotLoading()) return;
+
+    this.copilotInput.setValue('');
+    const userTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    this.copilotMessages.update(arr => [...arr, { role: 'user', text: prompt, time: userTime }]);
+    this.copilotLoading.set(true);
+
+    try {
+      const response = await fetch('/api/docker/copilot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          prompt,
+          systemInstruction: 'You are an elite, highly concise Docker and Kubernetes engineer. When requested to generate a Dockerfile, wrap it inside markdown block: ```dockerfile\\n...\\n```. Do not add unneeded fluff, be professional and highly operational.'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Copilot response error status: ' + response.status);
+      }
+
+      const resData = await response.json();
+      const assistantTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      this.copilotMessages.update(arr => [...arr, {
+        role: 'assistant',
+        text: resData.text || "I apologize, but I received empty response data.",
+        time: assistantTime
+      }]);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.copilotMessages.update(arr => [...arr, {
+        role: 'assistant',
+        text: `🔴 Connection error: Failed to reach Docker AI Copilot service. Please verify that your Secrets key environment is set. (${errMsg})`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    } finally {
+      this.copilotLoading.set(false);
+    }
+  }
+
+  // Helper: Copy Dockerfile blocks from Copilot chat directly into compilation builder
+  extractAndLoadDockerfile(text: string) {
+    const rx = /```dockerfile([\s\S]*?)```/i;
+    const match = rx.exec(text);
+    if (match && match[1]) {
+      this.dockerfileInput.set(match[1].trim());
+      this.activeTab.set('images');
+      alert("✅ Generated instructions extracted and loaded into Dockerfile editor!");
+    } else {
+      // try generic code block
+      const genericRx = /```([\s\S]*?)```/;
+      const genMatch = genericRx.exec(text);
+      if (genMatch && genMatch[1] && genMatch[1].includes('FROM')) {
+        this.dockerfileInput.set(genMatch[1].trim());
+        this.activeTab.set('images');
+        alert("✅ Generated instructions loaded into Dockerfile editor!");
+      } else {
+        alert("Could not locate a formatted Dockerfile code block in the message. Copy it manually.");
+      }
+    }
+  }
+}
