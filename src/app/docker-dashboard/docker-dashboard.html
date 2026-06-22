@@ -1552,8 +1552,6 @@
           </div>
         </div>
       }
-        </div>
-      }
 
       <!-- TAB 6: AI COPILOT & DEV OPS ASSISTANT -->
       @if (activeTab() === 'copilot') {
@@ -1654,41 +1652,177 @@
 
   <!-- OVERLAY 1: INTERACTIVE CLI terminal CONSOLE SHIELD -->
   @if (terminalContainer()) {
-    <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div class="w-full max-w-2xl bg-[#03070e] border border-slate-800 rounded-2xl shadow-2xl flex flex-col justify-between overflow-hidden">
+    <div class="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div class="w-full max-w-2xl bg-[#090e1a] border border-slate-800/80 rounded-2xl shadow-2xl flex flex-col justify-between overflow-hidden">
         
-        <!-- Header status -->
-        <div class="bg-[#0b1324] px-4 py-3 border-b border-slate-850 flex items-center justify-between">
+        <!-- Header status and Theme switch options -->
+        <div class="bg-[#0f172a] px-4 py-3 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 select-none">
           <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="font-bold text-xs font-mono text-slate-300 select-none">
-              Interactive Execution terminal bash on [container_alias: {{ terminalContainer()?.name }}]
+            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+            <span class="font-bold text-[11px] font-mono text-slate-300">
+              Xterm Console:
             </span>
+            <select [value]="terminalContainer()?.id" (change)="changeTerminalConnection($any($event.target).value)" class="bg-slate-900 border border-slate-700/60 text-slate-300 text-[10px] font-mono py-0.5 px-2 rounded cursor-pointer focus:outline-none focus:ring-1 focus:ring-cyan-500/40">
+              @for (c of runningContainers(); track c.id) {
+                <option [value]="c.id">{{ c.name }} ({{ c.imageTag }})</option>
+              }
+            </select>
           </div>
-          <button (click)="closeTerminal()" class="text-slate-400 hover:text-white flex items-center justify-center p-1 rounded-full bg-slate-900 hover:bg-slate-800 cursor-pointer">
-            <mat-icon class="text-sm">close</mat-icon>
-          </button>
+
+          <!-- Color palettes switcher -->
+          <div class="flex items-center gap-3">
+            <span class="text-[9px] font-mono text-slate-400">Palette:</span>
+            <div class="flex gap-1.5 items-center">
+              <button title="Cyberpunk Cyan" (click)="terminalTheme.set('cyan')" class="w-3.5 h-3.5 rounded-full bg-cyan-500 border border-transparent cursor-pointer" [class.ring-2]="terminalTheme() === 'cyan'" [class.ring-offset-2]="terminalTheme() === 'cyan'" [class.ring-cyan-400]="terminalTheme() === 'cyan'"></button>
+              <button title="Matrix Green" (click)="terminalTheme.set('green')" class="w-3.5 h-3.5 rounded-full bg-emerald-500 border border-transparent cursor-pointer" [class.ring-2]="terminalTheme() === 'green'" [class.ring-offset-2]="terminalTheme() === 'green'" [class.ring-emerald-400]="terminalTheme() === 'green'"></button>
+              <button title="Phosphor Amber" (click)="terminalTheme.set('amber')" class="w-3.5 h-3.5 rounded-full bg-amber-500 border border-transparent cursor-pointer" [class.ring-2]="terminalTheme() === 'amber'" [class.ring-offset-2]="terminalTheme() === 'amber'" [class.ring-amber-400]="terminalTheme() === 'amber'"></button>
+              <button title="Solarized" (click)="terminalTheme.set('solarized')" class="w-3.5 h-3.5 rounded-full bg-yellow-600 border border-transparent cursor-pointer" [class.ring-2]="terminalTheme() === 'solarized'" [class.ring-offset-2]="terminalTheme() === 'solarized'" [class.ring-yellow-400]="terminalTheme() === 'solarized'"></button>
+              <button title="Classic Slate" (click)="terminalTheme.set('classic')" class="w-3.5 h-3.5 rounded-full bg-slate-500 border border-transparent cursor-pointer" [class.ring-2]="terminalTheme() === 'classic'" [class.ring-offset-2]="terminalTheme() === 'classic'" [class.ring-slate-350]="terminalTheme() === 'classic'"></button>
+            </div>
+            
+            <button (click)="closeTerminal()" class="text-slate-400 hover:text-white flex items-center justify-center p-1 rounded-full bg-slate-900 hover:bg-slate-800 cursor-pointer">
+              <mat-icon class="text-sm">close</mat-icon>
+            </button>
+          </div>
         </div>
 
-        <!-- Terminal screen console logs -->
-        <!-- Viewport is linked to standard Ref pointer to automatically scroll to bottom -->
-        <div #terminalBox class="p-4 bg-slate-950/90 font-mono text-[11px] text-[#38bdf8] h-72 overflow-y-auto space-y-1 text-left">
-          @for (line of termLines(); track $index) {
-            <div class="whitespace-pre-wrap leading-relaxed select-text">{{ line }}</div>
-          }
-        </div>
+        @if (termActiveApp() === 'htop') {
+          <!-- FULLSCREEN DYNAMIC HTOP COMPONENT -->
+          <div class="p-4 bg-[#010a15] text-[#859900] h-80 font-mono text-[10px] flex flex-col justify-between overflow-hidden select-none">
+            <!-- Top stats panel -->
+            <div class="grid grid-cols-2 gap-4 pb-2 border-b border-slate-800">
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-slate-450 font-mono w-6 font-bold">CPU</span>
+                  <span class="text-slate-500 font-mono font-bold">[</span>
+                  <div class="flex-1 bg-slate-900 h-1.5 rounded-full overflow-hidden flex">
+                    <div class="bg-red-500 rounded-full h-full" [style.width.%]="(terminalContainer()?.stats?.cpu || 0.1) * 10"></div>
+                  </div>
+                  <span class="text-slate-500 font-mono font-bold">]</span>
+                  <span class="text-emerald-400 font-bold ml-1 font-mono">{{ ((terminalContainer()?.stats?.cpu || 0.1) * 10).toFixed(1) }}%</span>
+                </div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <span class="text-slate-450 font-mono w-6 font-bold">Mem</span>
+                  <span class="text-slate-500 font-mono font-bold">[</span>
+                  <div class="flex-1 bg-slate-900 h-1.5 rounded-full overflow-hidden flex">
+                    <div class="bg-blue-500 rounded-full h-full" [style.width.%]="((terminalContainer()?.stats?.memory || 10) / (terminalContainer()?.stats?.memoryLimit || 512)) * 100"></div>
+                  </div>
+                  <span class="text-slate-500 font-mono font-bold">]</span>
+                  <span class="text-cyan-400 font-bold ml-1 font-mono">{{ terminalContainer()?.stats?.memory?.toFixed(1) }}M/{{ terminalContainer()?.stats?.memoryLimit }}M</span>
+                </div>
+              </div>
+              <div class="text-right text-slate-400 text-[10px]">
+                <div>Tasks: <span class="text-slate-100 font-bold">4, 1 running</span></div>
+                <div>Uptime: <span class="text-slate-100 font-bold">01:42:08</span></div>
+                <div>Load average: <span class="text-slate-100 font-bold">0.12 0.08 0.05</span></div>
+              </div>
+            </div>
 
-        <!-- CLI shell action input bar -->
-        <div class="p-3 bg-slate-900/60 border-t border-slate-850 flex items-center gap-2 font-mono">
-          <span class="text-emerald-400 text-xs font-bold font-mono">
-            sh:{{ terminalContainer()?.currentWorkdir }} #
-          </span>
-          <input [formControl]="termInput" (keyup.enter)="executeTermCommand()" placeholder="ls, cd, pwd, cat, ping, curl, echo..." class="flex-1 bg-transparent text-slate-100 placeholder-slate-600 text-xs font-mono focus:outline-none focus:ring-0 ring-0 focus:border-transparent accent-transparent">
-          <button (click)="executeTermCommand()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-3 py-1.5 rounded cursor-pointer leading-normal flex items-center gap-1 font-sans border border-transparent">
-            Submit
-            <mat-icon class="text-[11px] font-bold">keyboard_return</mat-icon>
-          </button>
-        </div>
+            <!-- Processes grid -->
+            <div class="flex-1 my-2 overflow-y-auto">
+              <table class="w-full text-left font-mono">
+                <thead>
+                  <tr class="bg-[#073642] text-slate-200">
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">PID</th>
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">USER</th>
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">PRI</th>
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">NI</th>
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">CPU%</th>
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">MEM%</th>
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">TIME+</th>
+                    <th class="px-1.5 py-0.5 text-[9px] font-bold">Command</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-300">
+                  <tr>
+                    <td class="px-1.5 text-cyan-400">1</td>
+                    <td class="px-1.5 text-emerald-400">root</td>
+                    <td class="px-1.5">20</td>
+                    <td class="px-1.5">0</td>
+                    <td class="px-1.5">{{ ((terminalContainer()?.stats?.cpu || 0.1) * 3).toFixed(1) }}</td>
+                    <td class="px-1.5">1.2</td>
+                    <td class="px-1.5">0:01.42</td>
+                    <td class="px-1.5 text-blue-300">npm run start</td>
+                  </tr>
+                  <tr>
+                    <td class="px-1.5 text-cyan-400">15</td>
+                    <td class="px-1.5 text-emerald-400">root</td>
+                    <td class="px-1.5">20</td>
+                    <td class="px-1.5">0</td>
+                    <td class="px-1.5">{{ ((terminalContainer()?.stats?.cpu || 0.1) * 7).toFixed(1) }}</td>
+                    <td class="px-1.5">3.8</td>
+                    <td class="px-1.5">0:08.57</td>
+                    <td class="px-1.5 text-blue-300 font-bold">node app.js</td>
+                  </tr>
+                  <tr>
+                    <td class="px-1.5 text-cyan-400">30</td>
+                    <td class="px-1.5 text-emerald-400">root</td>
+                    <td class="px-1.5">20</td>
+                    <td class="px-1.5">0</td>
+                    <td class="px-1.5">0.0</td>
+                    <td class="px-1.5">0.4</td>
+                    <td class="px-1.5">0:00.12</td>
+                    <td class="px-1.5 text-amber-300">sh</td>
+                  </tr>
+                  <tr class="bg-cyan-500/10">
+                    <td class="px-1.5 text-cyan-400">45</td>
+                    <td class="px-1.5 text-emerald-400">root</td>
+                    <td class="px-1.5">20</td>
+                    <td class="px-1.5">0</td>
+                    <td class="px-1.5">0.2</td>
+                    <td class="px-1.5">0.1</td>
+                    <td class="px-1.5">0:00.08</td>
+                    <td class="px-1.5 text-yellow-300 font-bold">htop</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Htop footer control -->
+            <div class="bg-slate-900 border-t border-slate-800 text-slate-100 flex items-center justify-between px-2 py-1 text-[9px] font-bold">
+              <div class="flex gap-3 font-mono text-slate-400">
+                <span>F1:Help</span>
+                <span>F2:Setup</span>
+                <span>F5:Tree</span>
+                <span class="text-yellow-400">F10:Quit</span>
+              </div>
+              <button (click)="termActiveApp.set(null)" class="bg-red-650 hover:bg-red-600 text-[9px] font-bold text-white py-0.5 px-2 rounded cursor-pointer leading-normal uppercase border-none">
+                Close htop
+              </button>
+            </div>
+          </div>
+        @} @else {
+          <!-- STANDARD RETRO TERMINAL OUTPUT LIST -->
+          <!-- Viewport is linked to standard Ref pointer to automatically scroll to bottom -->
+          <div #terminalBox class="p-4 font-mono text-[11px] h-72 overflow-y-auto space-y-1 text-left select-text"
+            [class.bg-[#020a06]]="terminalTheme() === 'green'" [class.text-emerald-400]="terminalTheme() === 'green'"
+            [class.bg-[#0f0701]]="terminalTheme() === 'amber'" [class.text-amber-500]="terminalTheme() === 'amber'"
+            [class.bg-[#002b36]]="terminalTheme() === 'solarized'" [class.text-[#93a1a1]]="terminalTheme() === 'solarized'"
+            [class.bg-[#1e1e1e]]="terminalTheme() === 'classic'" [class.text-slate-100]="terminalTheme() === 'classic'"
+            [class.bg-slate-950]="terminalTheme() === 'cyan'" [class.text-cyan-400]="terminalTheme() === 'cyan'">
+            @for (line of termLines(); track $index) {
+              <div class="whitespace-pre-wrap leading-relaxed select-text">{{ line }}</div>
+            }
+          </div>
+
+          <!-- CLI shell action input bar -->
+          <div class="p-3 bg-slate-900/60 border-t border-slate-850 flex items-center gap-2 font-mono">
+            <span class="text-emerald-400 text-xs font-bold font-mono">
+              sh:{{ terminalContainer()?.currentWorkdir }} #
+            </span>
+            <input [formControl]="termInput" 
+              (keyup.enter)="executeTermCommand()" 
+              (keydown.arrowup)="navigateHistory('up', $event)"
+              (keydown.arrowdown)="navigateHistory('down', $event)"
+              (keydown.tab)="triggerAutoComplete($event)"
+              placeholder="ls, cd, pwd, cat, ping, curl, echo..." 
+              class="flex-1 bg-transparent text-slate-100 placeholder-slate-600 text-xs font-mono focus:outline-none focus:ring-0 ring-0 focus:border-transparent accent-transparent">
+            <button (click)="executeTermCommand()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-3 py-1.5 rounded cursor-pointer leading-normal flex items-center gap-1 font-sans border border-transparent">
+              Submit
+              <mat-icon class="text-[11px] font-bold">keyboard_return</mat-icon>
+            </button>
+          </div>
+        }
 
       </div>
     </div>

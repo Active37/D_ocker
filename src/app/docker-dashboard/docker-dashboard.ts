@@ -67,6 +67,7 @@ export interface DockerContainer {
   currentWorkdir: string;
   history: string[]; // shell command history
   cmd: string;
+  installedPackages?: string[];
 }
 
 export interface DockerVolume {
@@ -121,6 +122,12 @@ export class DockerDashboard implements OnDestroy, AfterViewInit {
   webBrowserContainer = signal<DockerContainer | null>(null);
   webBrowserHostPort = signal<number | null>(null);
   webBrowserContent = signal<string>('');
+
+  // Enhanced Terminal States (Xterm-style)
+  terminalTheme = signal<'classic' | 'green' | 'amber' | 'cyan' | 'solarized'>('cyan');
+  termHistoryIndex = 0;
+  termActiveApp = signal<'htop' | null>(null);
+  runningContainers = computed(() => this.containers().filter(c => c.status === 'running'));
 
   // AI Copilot state
   copilotInput = new FormControl('');
@@ -1135,7 +1142,8 @@ CMD ["python3", "-m", "http.server", "8000"]`);
       ],
       filesystem: initialFS,
       history: [],
-      cmd: image.cmd
+      cmd: image.cmd,
+      installedPackages: []
     };
 
     // Auto append logs based on service tags
@@ -1699,12 +1707,15 @@ ${JSON.stringify({
   openTerminal(container: DockerContainer) {
     this.terminalContainer.set(container);
     this.activeTab.set('containers');
+    this.termActiveApp.set(null);
+    this.termHistoryIndex = container.history?.length || 0;
 
     // Seed terminal console header
     this.termLines.set([
       `Microsoft Linux Core (Container Shell [ID: ${container.id.substring(0,6)}])`,
       `Default working directory: ${container.currentWorkdir}`,
       `Type 'help' to review list of simulated Docker diagnostic tools.`,
+      `Commands: ps, apt-get, install, top, clear, cd, ls -la, ping, curl, tree, cowsay, figlet...`,
       `Host bridge loopback configured. Ping other container IP addresses to test bridge network routes.`,
       ` `
     ]);
@@ -1714,6 +1725,70 @@ ${JSON.stringify({
 
   closeTerminal() {
     this.terminalContainer.set(null);
+    this.termActiveApp.set(null);
+  }
+
+  changeTerminalConnection(containerId: string) {
+    const target = this.containers().find(c => c.id === containerId && c.status === 'running');
+    if (target) {
+      this.openTerminal(target);
+    }
+  }
+
+  navigateHistory(direction: 'up' | 'down', event: Event) {
+    event.preventDefault();
+    const container = this.terminalContainer();
+    if (!container) return;
+    if (!container.history) {
+      container.history = [];
+    }
+    const len = container.history.length;
+    if (len === 0) return;
+
+    if (direction === 'up') {
+      if (this.termHistoryIndex > 0) {
+        this.termHistoryIndex--;
+      }
+    } else {
+      if (this.termHistoryIndex < len) {
+        this.termHistoryIndex++;
+      }
+    }
+
+    if (this.termHistoryIndex >= 0 && this.termHistoryIndex < len) {
+      this.termInput.setValue(container.history[this.termHistoryIndex]);
+    } else {
+      this.termInput.setValue('');
+    }
+  }
+
+  triggerAutoComplete(event: Event) {
+    event.preventDefault();
+    const container = this.terminalContainer();
+    if (!container) return;
+
+    const val = this.termInput.value || '';
+    const tokens = val.trim().split(/\s+/);
+    if (tokens.length === 0) return;
+
+    const lastToken = tokens[tokens.length - 1];
+    if (!lastToken) return;
+    
+    // Find files/folders in current directory starting with lastToken
+    const files = this.getFilesInDirectory(container, container.currentWorkdir);
+    const matches = files.filter(f => f.name.startsWith(lastToken));
+
+    if (matches.length === 1) {
+      // complete this file/folder!
+      tokens[tokens.length - 1] = matches[0].name + (matches[0].type === 'dir' ? '/' : '');
+      this.termInput.setValue(tokens.join(' '));
+    } else if (matches.length > 1) {
+      // print matching possibilities to terminal lines
+      const prompt = `sh:${container.currentWorkdir} # ${val}`;
+      const possibilities = matches.map(m => m.name + (m.type === 'dir' ? '/' : '')).join('   ');
+      this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
+      setTimeout(() => this.scrollToTerminalBottom(), 50);
+    }
   }
 
   executeTermCommand() {
@@ -1726,8 +1801,17 @@ ${JSON.stringify({
     // Reset shell input
     this.termInput.setValue('');
 
+    // Update command history
+    if (!container.history) {
+      container.history = [];
+    }
+    if (container.history.length === 0 || container.history[container.history.length - 1] !== cmdInput) {
+      container.history.push(cmdInput);
+    }
+    this.termHistoryIndex = container.history.length;
+
     // Append standard command echo
-    const promptHeader = `# `;
+    const promptHeader = `sh:${container.currentWorkdir} # `;
     this.termLines.update(arr => [...arr, `${promptHeader}${cmdInput}`]);
 
     // Parse commands and parameters
@@ -1792,7 +1876,11 @@ ${JSON.stringify({
       }
 
       case 'ls': {
-        let lsTarget = args[0] || container.currentWorkdir;
+        const isLong = args.some(arg => arg.startsWith('-') && arg.includes('l'));
+        const isAll = args.some(arg => arg.startsWith('-') && arg.includes('a'));
+        const pathArgs = args.filter(arg => !arg.startsWith('-'));
+        
+        let lsTarget = pathArgs[0] || container.currentWorkdir;
         if (!lsTarget.startsWith('/')) {
           const current = container.currentWorkdir === '/' ? '' : container.currentWorkdir;
           lsTarget = `${current}/${lsTarget}`;
@@ -1803,12 +1891,24 @@ ${JSON.stringify({
         }
 
         const files = this.getFilesInDirectory(container, lsTarget);
-        if (files.length === 0) {
+        if (isLong) {
           responseLines = [];
+          if (isAll) {
+            responseLines.push(`drwxr-xr-x   2 root     root          4096 Jun 22 15:10 .`);
+            responseLines.push(`drwxr-xr-x   3 root     root          4096 Jun 22 15:10 ..`);
+          }
+          files.forEach(f => {
+            const perm = f.type === 'dir' ? 'drwxr-xr-x' : '-rw-r--r--';
+            const links = f.type === 'dir' ? '2' : '1';
+            const size = f.type === 'dir' ? '4096' : (f.size ? String(f.size).replace(' B', '') : '128');
+            responseLines.push(`${perm}   ${links} root     root         ${size.padStart(5, ' ')} Jun 22 15:10 ${f.type === 'dir' ? f.name + '/' : f.name}`);
+          });
         } else {
-          responseLines = [
-            files.map(f => f.type === 'dir' ? `\x1b[34m${f.name}/\x1b[0m` : f.name).join('   ')
-          ];
+          let items = files.map(f => f.type === 'dir' ? `${f.name}/` : f.name);
+          if (isAll) {
+            items = ['.', '..', ...items];
+          }
+          responseLines = [items.join('   ')];
         }
         break;
       }
@@ -2020,6 +2120,179 @@ ${JSON.stringify({
         break;
       }
 
+      case 'ps': {
+        const isAux = args.some(arg => arg.startsWith('-') && arg.includes('a')) || args.includes('aux');
+        responseLines = [
+          isAux 
+            ? `USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND`
+            : `  PID TTY          TIME CMD`
+        ];
+
+        const isNode = container.imageTag.includes('node');
+        const isNginx = container.imageTag.includes('nginx');
+        const isPostgres = container.imageTag.includes('postgres');
+
+        if (isAux) {
+          if (isNode) {
+            responseLines.push(`root         1  0.2  1.4 550240 28620 ?        Ssl  15:09   0:02 npm run start`);
+            responseLines.push(`root        15  0.8  4.2 812420 86104 ?        Sl   15:09   0:08 node app.js`);
+          } else if (isNginx) {
+            responseLines.push(`root         1  0.0  0.5  24840  9820 ?        Ss   15:09   0:00 nginx: master process nginx -g daemon off;`);
+            responseLines.push(`nginx        6  0.1  0.3  25210  6480 ?        S    15:09   0:01 nginx: worker process`);
+          } else if (isPostgres) {
+            responseLines.push(`postgres     1  0.1  1.2 245120 24820 ?        Ss   15:09   0:01 postgres`);
+            responseLines.push(`postgres    10  0.0  0.2 245120  4210 ?        Ss   15:09   0:00 postgres: checkpointer`);
+            responseLines.push(`postgres    11  0.0  0.4 245120  8610 ?        Ss   15:09   0:00 postgres: background writer`);
+            responseLines.push(`postgres    12  0.0  0.3 245120  6540 ?        Ss   15:09   0:00 postgres: walwriter`);
+          } else {
+            responseLines.push(`root         1  0.0  0.1   4250   920 ?        Ss   15:09   0:00 sh`);
+          }
+          responseLines.push(`root        42  0.0  0.0   2410   720 pts/0    R+   15:10   0:00 ps ${args.join(' ')}`);
+        } else {
+          if (isNode) {
+            responseLines.push(`    1 pts/0    00:00:02 npm run start`);
+            responseLines.push(`   15 pts/0    00:00:08 node`);
+          } else if (isNginx) {
+            responseLines.push(`    1 pts/0    00:00:00 nginx`);
+            responseLines.push(`    6 pts/0    00:00:01 nginx`);
+          } else if (isPostgres) {
+            responseLines.push(`    1 pts/0    00:00:01 postgres`);
+          } else {
+            responseLines.push(`    1 pts/0    00:00:00 sh`);
+          }
+          responseLines.push(`   42 pts/0    00:00:00 ps`);
+        }
+        break;
+      }
+
+      case 'apt-get':
+      case 'apt':
+      case 'apk':
+      case 'npm': {
+        const subSub = args[0] || '';
+        const targetPackage = args[1] || '';
+
+        if ((mainCmd === 'apt-get' || mainCmd === 'apt') && subSub === 'install') {
+          if (!targetPackage) {
+            responseLines = [`apt-get: Please specify package target (e.g., htop, cowsay, figlet, tree)`];
+            break;
+          }
+          this.simulatePackageInstallation(container, targetPackage);
+          return;
+        } else if (mainCmd === 'apk' && subSub === 'add') {
+          if (!targetPackage) {
+            responseLines = [`apk: Please specify package target (e.g., htop, cowsay, figlet, tree)`];
+            break;
+          }
+          this.simulatePackageInstallation(container, targetPackage);
+          return;
+        } else if (mainCmd === 'npm' && subSub === 'install') {
+          if (!targetPackage) {
+            responseLines = [`npm: Please specify target module (e.g., express, lodash, chalk)`];
+            break;
+          }
+          this.simulatePackageInstallation(container, targetPackage);
+          return;
+        } else {
+          responseLines = [
+            `Package Management Console for: ${container.imageTag}`,
+            mainCmd === 'apk' ? `Usage: apk add <package>` : (mainCmd === 'npm' ? `Usage: npm install <package>` : `Usage: apt-get install <package>`),
+            `Available virtual packages: htop, cowsay, figlet, tree, python3, git`
+          ];
+        }
+        break;
+      }
+
+      case 'htop':
+      case 'top': {
+        const isInstalled = container.installedPackages?.includes('htop') || mainCmd === 'top';
+        if (!isInstalled) {
+          responseLines = [`bash: ${mainCmd}: command not found (Try running 'apt-get install htop' first!)`];
+          break;
+        }
+        this.termActiveApp.set('htop');
+        return;
+      }
+
+      case 'cowsay': {
+        const isInstalled = container.installedPackages?.includes('cowsay');
+        if (!isInstalled) {
+          responseLines = [`bash: cowsay: command not found (Try running 'apt-get install cowsay' first!)`];
+          break;
+        }
+        const text = args.join(' ') || 'Moo! Docker rules!';
+        const border = '-'.repeat(text.length + 2);
+        responseLines = [
+          `  ${border}`,
+          `  < ${text} >`,
+          `  ${border}`,
+          `         \\   ^__^`,
+          `          \\  (oo)\\_______`,
+          `             (__)\\       )\\/\\`,
+          `                 ||----w |`,
+          `                 ||     ||`
+        ];
+        break;
+      }
+
+      case 'figlet': {
+        const isInstalled = container.installedPackages?.includes('figlet');
+        if (!isInstalled) {
+          responseLines = [`bash: figlet: command not found (Try running 'apt-get install figlet' first!)`];
+          break;
+        }
+        const textToFig = (args.join(' ') || 'DOCKER').toUpperCase();
+        responseLines = this.generateFigletASCII(textToFig);
+        break;
+      }
+
+      case 'tree': {
+        const isInstalled = container.installedPackages?.includes('tree');
+        if (!isInstalled) {
+          responseLines = [`bash: tree: command not found (Try running 'apt-get install tree' first!)`];
+          break;
+        }
+        responseLines = this.generateTreeOutput(container, container.currentWorkdir);
+        break;
+      }
+
+      case 'git': {
+        const isInstalled = container.installedPackages?.includes('git');
+        if (!isInstalled) {
+          responseLines = [`bash: git: command not found (Try running 'apt-get install git' first!)`];
+          break;
+        }
+        const gitCmd = args[0] || 'status';
+        if (gitCmd === 'status') {
+          responseLines = [
+            `On branch main`,
+            `Your branch is up to date with 'origin/main'.`,
+            ` `,
+            `Changes not staged for commit:`,
+            `  (use "git add <file>..." to update what will be committed)`,
+            `  (use "git restore <file>..." to discard changes in working directory)`,
+            `	modified:   package.json`,
+            ` `,
+            `no changes added to commit (use "git add" and/or "git commit -a")`
+          ];
+        } else if (gitCmd === 'clone') {
+          const repo = args[1] || 'https://github.com/nginx/nginx.git';
+          responseLines = [
+            `Cloning into '${repo.split('/').pop()?.replace('.git', '') || 'repo'}'...`,
+            `remote: Enumerating objects: 1250, done.`,
+            `remote: Counting objects: 100% (1250/1250), done.`,
+            `remote: Compressing objects: 100% (802/802), done.`,
+            `Receiving objects: 100% (1250/1250), 4.21 MiB | 2.15 MB/s, done.`,
+            `Resolving deltas: 100% (415/415), done.`
+          ];
+        } else {
+          responseLines = [
+            `git: '${gitCmd}' is not a simulated git command. Try 'git status' or 'git clone'.`
+          ];
+        }
+        break;
+      }
+
       default:
         responseLines = [`sh: command not found: ${mainCmd}`];
         break;
@@ -2063,6 +2336,131 @@ ${JSON.stringify({
         void 0; // Safe no-op to satisfy empty block rule
       }
     }
+  }
+
+  simulatePackageInstallation(container: DockerContainer, pkg: string) {
+    const pkgLower = pkg.toLowerCase();
+    
+    this.termLines.update(arr => [...arr, 
+      `Reading package lists... Done`,
+      `Building dependency tree... Done`,
+      `Reading state information... Done`,
+      `The following NEW packages will be installed:`,
+      `  ${pkgLower}`,
+      `0 upgraded, 1 newly installed, 0 to remove and 12 not upgraded.`,
+      `Need to get 248 kB of archives.`,
+      `After this operation, 984 kB of additional disk space will be used.`,
+      `Get:1 http://dl-cdn.alpinelinux.org/alpine/v3.18/main ${pkgLower} [248 kB]`,
+    ]);
+
+    let ticks = 0;
+    const interval = setInterval(() => {
+      ticks++;
+      if (ticks === 1) {
+        this.termLines.update(arr => [...arr, `Connecting to dl-cdn.alpinelinux.org (151.101.86.133:80)...`]);
+      } else if (ticks === 2) {
+        this.termLines.update(arr => [...arr, `Downloaded 248 kB of ${pkgLower} packages.`]);
+      } else if (ticks === 3) {
+        this.termLines.update(arr => [...arr, 
+          `Selecting previously unselected package ${pkgLower}.`,
+          `Preparing to unpack .../${pkgLower}_all.apk ...`,
+          `Unpacking ${pkgLower} (3.6.1-r0) ...`
+        ]);
+      } else if (ticks === 4) {
+        this.termLines.update(arr => [...arr, 
+          `Setting up ${pkgLower} ...`,
+          `Verifying interface execution pointer layers...`
+        ]);
+      } else if (ticks === 5) {
+        clearInterval(interval);
+        
+        // Add to installed registry
+        if (!container.installedPackages) {
+          container.installedPackages = [];
+        }
+        if (!container.installedPackages.includes(pkgLower)) {
+          container.installedPackages.push(pkgLower);
+        }
+
+        // Add binary fake executable file to filesystem
+        const binPath = `/usr/bin/${pkgLower}`;
+        container.filesystem[binPath] = {
+          type: 'file',
+          content: `# Simulated bin executable for ${pkgLower}`,
+          size: 1024
+        };
+
+        this.termLines.update(arr => [...arr, 
+          `OK. Installed '${pkgLower}' successfully!`,
+          `Type '${pkgLower}' to execute immediately.`,
+          ` `
+        ]);
+        setTimeout(() => this.scrollToTerminalBottom(), 50);
+      }
+      setTimeout(() => this.scrollToTerminalBottom(), 50);
+    }, 300);
+  }
+
+  generateFigletASCII(text: string): string[] {
+    const font: Record<string, string[]> = {
+      'A': ['  ████   ', ' ██  ██  ', '████████ ', '██    ██ '],
+      'B': ['███████  ', '██    ██ ', '███████  ', '██    ██ ', '███████  '],
+      'C': [' ██████  ', '██       ', '██       ', ' ██████  '],
+      'D': ['██████   ', '██   ██  ', '██    ██ ', '██████   '],
+      'E': ['████████ ', '██       ', '██████   ', '██       ', '████████ '],
+      'F': ['████████ ', '██       ', '██████   ', '██       ', '██       '],
+      'G': [' ██████  ', '██       ', '██   ███ ', ' ██████  '],
+      'H': ['██    ██ ', '██    ██ ', '████████ ', '██    ██ ', '██    ██ '],
+      'I': ['████████ ', '   ██    ', '   ██    ', '████████ '],
+      'J': ['   █████ ', '     ██  ', '██   ██  ', ' █████   '],
+      'K': ['██    ██ ', '██  ██   ', '█████    ', '██  ██   ', '██    ██ '],
+      'L': ['██       ', '██       ', '██       ', '████████ '],
+      'M': ['██    ██ ', '████████ ', '██ ██ ██ ', '██    ██ '],
+      'N': ['██    ██ ', '████  ██ ', '██  ████ ', '██    ██ '],
+      'O': [' ██████  ', '██    ██ ', '██    ██ ', ' ██████  '],
+      'P': ['███████  ', '██    ██ ', '███████  ', '██       ', '██       '],
+      'R': ['███████  ', '██    ██ ', '███████  ', '██  ██   ', '██    ██ '],
+      'S': [' ██████  ', '██       ', ' ██████  ', '      ██ ', '███████  '],
+      'T': ['████████ ', '   ██    ', '   ██    ', '   ██    '],
+      'U': ['██    ██ ', '██    ██ ', '██    ██ ', ' ██████  '],
+      'V': ['██    ██ ', '██    ██ ', ' ██  ██  ', '  ████   '],
+      'W': ['██    ██ ', '██    ██ ', '██ ██ ██ ', '████████ '],
+      'X': ['██    ██ ', ' ██  ██  ', '  ████   ', ' ██  ██  ', '██    ██ '],
+      'Y': ['██    ██ ', ' ██  ██  ', '  ████   ', '  ████   '],
+      'Z': ['████████ ', '    ██   ', '  ██     ', '████████ '],
+      ' ': ['    ', '    ', '    ', '    ']
+    };
+
+    const lines = ['', '', '', '', ''];
+    for (let i = 0; i < Math.min(text.length, 12); i++) {
+      const char = text[i];
+      const glyph = font[char] || ['██ ', '██ ', '██ ', '██ '];
+      for (let r = 0; r < 4; r++) {
+        lines[r] += (glyph[r] || '   ') + '  ';
+      }
+    }
+    return lines;
+  }
+
+  generateTreeOutput(container: DockerContainer, rootPath: string): string[] {
+    const fs = container.filesystem;
+    const paths = Object.keys(fs).filter(p => p.startsWith(rootPath) && p !== rootPath);
+    if (paths.length === 0) {
+      return [`.`, `0 directories, 0 files`];
+    }
+    
+    const lines = [rootPath];
+    paths.sort().forEach(p => {
+      const rel = p.substring(rootPath === '/' ? 1 : rootPath.length + 1);
+      const segments = rel.split('/');
+      const depth = segments.length;
+      const name = segments[segments.length - 1];
+      
+      const indent = '│   '.repeat(depth - 1);
+      const marker = '└── ';
+      lines.push(`${indent}${marker}${name}`);
+    });
+    return lines;
   }
 
   openLogsPanel(container: DockerContainer) {
