@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { DockerCacheService } from './docker-cache';
+import * as d3 from 'd3';
 
 // Simulated Models for Container Engine
 export interface VirtualFile {
@@ -99,6 +100,15 @@ export class DockerDashboard implements OnDestroy, AfterViewInit {
 
   // Active Panel Navigation State
   activeTab = signal<'dashboard' | 'containers' | 'images' | 'volumes' | 'networks' | 'copilot'>('dashboard');
+
+  // --- D3 Dashboard Metrics State ---
+  selectedMetricType = signal<'both' | 'cpu' | 'memory'>('both');
+  runningContainersCount = computed(() => this.runningContainers().length);
+  totalCpuUsage = computed(() => this.runningContainers().reduce((acc, c) => acc + (c.stats?.cpu || 0), 0));
+  totalMemUsage = computed(() => this.runningContainers().reduce((acc, c) => acc + (c.stats?.memory || 0), 0));
+  
+  hostStatsHistory: { timestamp: Date; cpu: number; memory: number }[] = [];
+  private resizeObserver: ResizeObserver | null = null;
 
   // Template utilities
   Object = Object;
@@ -584,15 +594,44 @@ CMD ["node", "app.js"]`);
       const templ = this.selectedTemplate();
       this.loadTemplateDockerfile(templ);
     });
+
+    // D3 real-time metrics tracker effect
+    effect(() => {
+      // Read the total metrics reactively
+      const cpu = this.totalCpuUsage();
+      const mem = this.totalMemUsage();
+      const tab = this.activeTab();
+      this.selectedMetricType();
+
+      if (tab !== 'dashboard') return;
+
+      const newPoint = {
+        timestamp: new Date(),
+        cpu: cpu,
+        memory: mem
+      };
+
+      this.hostStatsHistory.push(newPoint);
+      if (this.hostStatsHistory.length > 25) {
+        this.hostStatsHistory.shift();
+      }
+
+      // Schedule canvas update
+      setTimeout(() => this.updateD3Charts(), 50);
+    });
   }
 
   ngAfterViewInit() {
     this.scrollToTerminalBottom();
+    this.initResizeObserver();
   }
 
   ngOnDestroy() {
     if (this.stateTimer) {
       clearInterval(this.stateTimer);
+    }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
     }
   }
 
@@ -2538,5 +2577,364 @@ ${JSON.stringify({
         alert("Could not locate a formatted Dockerfile code block in the message. Copy it manually.");
       }
     }
+  }
+
+  // --- D3.JS METRICS RENDER METHODS ---
+  initResizeObserver() {
+    if (typeof window === 'undefined') return;
+
+    const trendWrapper = document.getElementById('d3-trend-wrapper');
+    const barsWrapper = document.getElementById('d3-bars-wrapper');
+
+    this.resizeObserver = new ResizeObserver(() => {
+      this.updateD3Charts();
+    });
+
+    if (trendWrapper) this.resizeObserver.observe(trendWrapper);
+    if (barsWrapper) this.resizeObserver.observe(barsWrapper);
+  }
+
+  updateD3Charts() {
+    this.renderTrendChart();
+    this.renderBreakdownChart();
+  }
+
+  renderTrendChart() {
+    const svg = d3.select('#d3-trend-svg');
+    svg.selectAll('*').remove();
+
+    if (this.hostStatsHistory.length === 0) {
+      return;
+    }
+
+    const svgEl = svg.node() as SVGSVGElement | null;
+    if (!svgEl) return;
+    
+    const container = svgEl.parentElement;
+    if (!container) return;
+    
+    const width = container.clientWidth || 300;
+    const height = container.clientHeight || 220;
+
+    const margin = { top: 15, right: 40, bottom: 25, left: 40 };
+    const contentWidth = width - margin.left - margin.right;
+    const contentHeight = height - margin.top - margin.bottom;
+
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const defs = svg.append('defs');
+
+    // CPU gradient
+    const cpuGrad = defs.append('linearGradient')
+      .attr('id', 'cpu-gradient')
+      .attr('x1', '0%').attr('y1', '0%')
+      .attr('x2', '0%').attr('y2', '100%');
+    cpuGrad.append('stop').attr('offset', '0%').attr('stop-color', '#38bdf8').attr('stop-opacity', 0.22);
+    cpuGrad.append('stop').attr('offset', '100%').attr('stop-color', '#38bdf8').attr('stop-opacity', 0);
+
+    // Memory gradient
+    const memGrad = defs.append('linearGradient')
+      .attr('id', 'mem-gradient')
+      .attr('x1', '0%').attr('y1', '0%')
+      .attr('x2', '0%').attr('y2', '100%');
+    memGrad.append('stop').attr('offset', '0%').attr('stop-color', '#10b981').attr('stop-opacity', 0.22);
+    memGrad.append('stop').attr('offset', '100%').attr('stop-color', '#10b981').attr('stop-opacity', 0);
+
+    // Scales
+    const xDomain = d3.extent(this.hostStatsHistory, d => d.timestamp) as [Date, Date];
+    const xScale = d3.scaleTime()
+      .domain(xDomain)
+      .range([0, contentWidth]);
+
+    const maxCpuVal = d3.max(this.hostStatsHistory, d => d.cpu) || 10;
+    const cpuMax = Math.max(100, maxCpuVal * 1.1);
+    const yCpuScale = d3.scaleLinear()
+      .domain([0, cpuMax])
+      .range([contentHeight, 0]);
+
+    const maxMemVal = d3.max(this.hostStatsHistory, d => d.memory) || 128;
+    const memMax = Math.max(512, maxMemVal * 1.1);
+    const yMemScale = d3.scaleLinear()
+      .domain([0, memMax])
+      .range([contentHeight, 0]);
+
+    // Gridlines (based on CPU tick scale)
+    const yTicks = yCpuScale.ticks(4);
+    g.selectAll('.grid-line')
+      .data(yTicks)
+      .enter()
+      .append('line')
+      .attr('class', 'grid-line')
+      .attr('x1', 0)
+      .attr('x2', contentWidth)
+      .attr('y1', d => yCpuScale(d))
+      .attr('y2', d => yCpuScale(d))
+      .attr('stroke', '#334155')
+      .attr('stroke-width', 0.5)
+      .attr('stroke-dasharray', '2,2')
+      .attr('opacity', 0.4);
+
+    const metricType = this.selectedMetricType();
+
+    // 1. Draw CPU line/area
+    if (metricType === 'both' || metricType === 'cpu') {
+      const cpuArea = d3.area<{ timestamp: Date; cpu: number; memory: number }>()
+        .x(d => xScale(d.timestamp))
+        .y0(contentHeight)
+        .y1(d => yCpuScale(d.cpu))
+        .curve(d3.curveMonotoneX);
+
+      g.append('path')
+        .datum(this.hostStatsHistory)
+        .attr('fill', 'url(#cpu-gradient)')
+        .attr('d', cpuArea);
+
+      const cpuLine = d3.line<{ timestamp: Date; cpu: number; memory: number }>()
+        .x(d => xScale(d.timestamp))
+        .y(d => yCpuScale(d.cpu))
+        .curve(d3.curveMonotoneX);
+
+      g.append('path')
+        .datum(this.hostStatsHistory)
+        .attr('fill', 'none')
+        .attr('stroke', '#38bdf8')
+        .attr('stroke-width', 2)
+        .attr('d', cpuLine);
+
+      // dot on last point
+      const lp = this.hostStatsHistory[this.hostStatsHistory.length - 1];
+      g.append('circle')
+        .attr('cx', xScale(lp.timestamp))
+        .attr('cy', yCpuScale(lp.cpu))
+        .attr('r', 4)
+        .attr('fill', '#38bdf8')
+        .attr('stroke', '#020617')
+        .attr('stroke-width', 1.5);
+    }
+
+    // 2. Draw Memory line/area
+    if (metricType === 'both' || metricType === 'memory') {
+      const memArea = d3.area<{ timestamp: Date; cpu: number; memory: number }>()
+        .x(d => xScale(d.timestamp))
+        .y0(contentHeight)
+        .y1(d => yMemScale(d.memory))
+        .curve(d3.curveMonotoneX);
+
+      g.append('path')
+        .datum(this.hostStatsHistory)
+        .attr('fill', 'url(#mem-gradient)')
+        .attr('d', memArea);
+
+      const memLine = d3.line<{ timestamp: Date; cpu: number; memory: number }>()
+        .x(d => xScale(d.timestamp))
+        .y(d => yMemScale(d.memory))
+        .curve(d3.curveMonotoneX);
+
+      g.append('path')
+        .datum(this.hostStatsHistory)
+        .attr('fill', 'none')
+        .attr('stroke', '#10b981')
+        .attr('stroke-width', 2)
+        .attr('d', memLine);
+
+      // dot on last point
+      const lp = this.hostStatsHistory[this.hostStatsHistory.length - 1];
+      g.append('circle')
+        .attr('cx', xScale(lp.timestamp))
+        .attr('cy', yMemScale(lp.memory))
+        .attr('r', 4)
+        .attr('fill', '#10b981')
+        .attr('stroke', '#020617')
+        .attr('stroke-width', 1.5);
+    }
+
+    // X axis
+    const formatTime = d3.timeFormat('%H:%M:%S');
+    const xAxisGen = d3.axisBottom(xScale).ticks(5).tickFormat((d) => formatTime(d as Date));
+    g.append('g')
+      .attr('transform', `translate(0, ${contentHeight})`)
+      .call(xAxisGen)
+      .attr('font-size', '8px')
+      .attr('font-style', 'italic')
+      .attr('font-family', 'ui-monospace, SFMono-Regular, monospace')
+      .call(g => g.select('.domain').attr('stroke', '#334155'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#334155'))
+      .call(g => g.selectAll('.tick text').attr('fill', '#64748b'));
+
+    // Left Y axis (CPU scale)
+    if (metricType === 'both' || metricType === 'cpu') {
+      const yAxisLeft = d3.axisLeft(yCpuScale).ticks(4).tickFormat(d => `${d}%`);
+      g.append('g')
+        .call(yAxisLeft)
+        .attr('font-size', '8px')
+        .attr('font-family', 'ui-monospace, SFMono-Regular, monospace')
+        .call(g => g.select('.domain').attr('stroke', '#334155'))
+        .call(g => g.selectAll('.tick line').attr('stroke', '#334155'))
+        .call(g => g.selectAll('.tick text').attr('fill', '#38bdf8'));
+    }
+
+    // Right Y axis (Mem scale)
+    if (metricType === 'both' || metricType === 'memory') {
+      const yAxisRight = d3.axisRight(yMemScale).ticks(4).tickFormat(d => `${d}M`);
+      g.append('g')
+        .attr('transform', `translate(${contentWidth}, 0)`)
+        .call(yAxisRight)
+        .attr('font-size', '8px')
+        .attr('font-family', 'ui-monospace, SFMono-Regular, monospace')
+        .call(g => g.select('.domain').attr('stroke', '#334155'))
+        .call(g => g.selectAll('.tick line').attr('stroke', '#334155'))
+        .call(g => g.selectAll('.tick text').attr('fill', '#10b981'));
+    }
+  }
+
+  renderBreakdownChart() {
+    const svg = d3.select('#d3-bars-svg');
+    svg.selectAll('*').remove();
+
+    const activeConts = this.runningContainers();
+    if (activeConts.length === 0) {
+      return;
+    }
+
+    const svgEl = svg.node() as SVGSVGElement | null;
+    if (!svgEl) return;
+
+    const container = svgEl.parentElement;
+    if (!container) return;
+
+    const width = container.clientWidth || 300;
+    const height = container.clientHeight || 220;
+
+    const margin = { top: 15, right: 40, bottom: 25, left: 110 };
+    const contentWidth = width - margin.left - margin.right;
+    const contentHeight = height - margin.top - margin.bottom;
+
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const yScale = d3.scaleBand()
+      .domain(activeConts.map(c => c.name))
+      .range([0, contentHeight])
+      .padding(0.28);
+
+    const metricType = this.selectedMetricType();
+    const subBarHeight = yScale.bandwidth() / 2 - 2;
+
+    const maxCpu = Math.max(10, d3.max(activeConts, c => c.stats?.cpu || 0) || 5);
+    const xCpuScale = d3.scaleLinear()
+      .domain([0, maxCpu * 1.1])
+      .range([0, contentWidth]);
+
+    const maxMem = d3.max(activeConts, c => c.stats?.memory || 0) || 128;
+    const xMemScale = d3.scaleLinear()
+      .domain([0, Math.max(512, maxMem * 1.1)])
+      .range([0, contentWidth]);
+
+    // Row backgrounds
+    g.selectAll('.row-bg')
+      .data(activeConts)
+      .enter()
+      .append('rect')
+      .attr('class', 'row-bg')
+      .attr('x', 0)
+      .attr('y', d => yScale(d.name) || 0)
+      .attr('width', contentWidth)
+      .attr('height', yScale.bandwidth())
+      .attr('fill', '#1e293b')
+      .attr('opacity', 0.2)
+      .attr('rx', 4);
+
+    // CPU Bars
+    if (metricType === 'both' || metricType === 'cpu') {
+      const yOffset = metricType === 'both' ? 2 : (yScale.bandwidth() / 4);
+      const bHeight = metricType === 'both' ? subBarHeight : (yScale.bandwidth() / 2);
+
+      g.selectAll('.cpu-bar')
+        .data(activeConts)
+        .enter()
+        .append('rect')
+        .attr('class', 'cpu-bar')
+        .attr('x', 0)
+        .attr('y', d => (yScale(d.name) || 0) + yOffset)
+        .attr('width', d => xCpuScale(d.stats?.cpu || 0))
+        .attr('height', bHeight)
+        .attr('fill', '#38bdf8')
+        .attr('rx', 1.5);
+
+      g.selectAll('.cpu-bar-label')
+        .data(activeConts)
+        .enter()
+        .append('text')
+        .attr('class', 'cpu-bar-label')
+        .attr('x', d => xCpuScale(d.stats?.cpu || 0) + 5)
+        .attr('y', d => (yScale(d.name) || 0) + yOffset + bHeight / 2 + 3)
+        .text(d => `${(d.stats?.cpu || 0).toFixed(1)}%`)
+        .attr('fill', '#38bdf8')
+        .attr('font-size', '8px')
+        .attr('font-family', 'ui-monospace, SFMono-Regular, monospace')
+        .attr('font-weight', 'medium');
+    }
+
+    // Memory Bars
+    if (metricType === 'both' || metricType === 'memory') {
+      const yOffset = metricType === 'both' ? (yScale.bandwidth() / 2 + 1) : (yScale.bandwidth() / 4);
+      const bHeight = metricType === 'both' ? subBarHeight : (yScale.bandwidth() / 2);
+
+      g.selectAll('.mem-bar')
+        .data(activeConts)
+        .enter()
+        .append('rect')
+        .attr('class', 'mem-bar')
+        .attr('x', 0)
+        .attr('y', d => (yScale(d.name) || 0) + yOffset)
+        .attr('width', d => xMemScale(d.stats?.memory || 0))
+        .attr('height', bHeight)
+        .attr('fill', '#10b981')
+        .attr('rx', 1.5);
+
+      g.selectAll('.mem-bar-label')
+        .data(activeConts)
+        .enter()
+        .append('text')
+        .attr('class', 'mem-bar-label')
+        .attr('x', d => xMemScale(d.stats?.memory || 0) + 5)
+        .attr('y', d => (yScale(d.name) || 0) + yOffset + bHeight / 2 + 3)
+        .text(d => `${(d.stats?.memory || 0).toFixed(1)}M`)
+        .attr('fill', '#10b981')
+        .attr('font-size', '8px')
+        .attr('font-family', 'ui-monospace, SFMono-Regular, monospace')
+        .attr('font-weight', 'medium');
+    }
+
+    // Container Names
+    g.selectAll('.container-y-label')
+      .data(activeConts)
+      .enter()
+      .append('text')
+      .attr('class', 'container-y-label')
+      .attr('x', -8)
+      .attr('y', d => (yScale(d.name) || 0) + yScale.bandwidth() / 2 + 3)
+      .attr('text-anchor', 'end')
+      .text(d => d.name)
+      .attr('fill', '#cbd5e1')
+      .attr('font-size', '9px')
+      .attr('font-family', 'ui-monospace, SFMono-Regular, monospace')
+      .attr('font-weight', 'medium');
+
+    // Bottom scale
+    const targetScale = metricType === 'memory' ? xMemScale : xCpuScale;
+    const bAxisGen = d3.axisBottom(targetScale)
+      .ticks(4)
+      .tickFormat(d => `${d}${metricType === 'memory' ? 'M' : '%'}`);
+
+    g.append('g')
+      .attr('transform', `translate(0, ${contentHeight})`)
+      .call(bAxisGen)
+      .attr('font-size', '7.5px')
+      .attr('font-family', 'ui-monospace, SFMono-Regular, monospace')
+      .call(g => g.select('.domain').attr('stroke', '#334155'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#334155'))
+      .call(g => g.selectAll('.tick text').attr('fill', '#475569'));
   }
 }

@@ -178,6 +178,118 @@
             </div>
           </div>
 
+          <!-- D3.JS REAL-TIME CONTAINER PERFORMANCE METRICS WIDGET -->
+          <div class="bg-[#0b1323] p-5 rounded-2xl border border-slate-800/80 space-y-4" id="host-performance-metrics-widget">
+            <div class="flex items-center justify-between border-b border-slate-800/60 pb-3 flex-wrap gap-2">
+              <div class="flex items-center gap-2">
+                <div class="p-2 bg-[#2496ed]/10 text-[#2496ed] rounded-lg">
+                  <mat-icon>insights</mat-icon>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-white leading-tight">Host-Wide Real-Time Resource Metrics</h3>
+                  <p class="text-[11px] text-slate-400">Aggregated live virtualization load across up to 10 sandboxed container instances</p>
+                </div>
+              </div>
+              
+              <div class="flex items-center gap-3">
+                <!-- Live Indicator -->
+                <span class="flex items-center gap-1.5 bg-[#091e1d]/80 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-mono text-emerald-400 font-semibold uppercase">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  D3 Engine: Live
+                </span>
+                <!-- Metric Type Switcher -->
+                <div class="bg-slate-900 border border-slate-800/80 rounded-lg p-0.5 flex gap-1">
+                  <button (click)="selectedMetricType.set('both')" [class.bg-[#2496ed]]="selectedMetricType() === 'both'" [class.text-white]="selectedMetricType() === 'both'" [class.text-slate-400]="selectedMetricType() !== 'both'" class="text-[10.5px] font-medium px-2.5 py-1.5 rounded cursor-pointer transition-all border-none">Both</button>
+                  <button (click)="selectedMetricType.set('cpu')" [class.bg-[#2496ed]]="selectedMetricType() === 'cpu'" [class.text-white]="selectedMetricType() === 'cpu'" [class.text-slate-400]="selectedMetricType() !== 'cpu'" class="text-[10.5px] font-medium px-2.5 py-1.5 rounded cursor-pointer transition-all border-none">CPU</button>
+                  <button (click)="selectedMetricType.set('memory')" [class.bg-[#2496ed]]="selectedMetricType() === 'memory'" [class.text-white]="selectedMetricType() === 'memory'" [class.text-[#2496ed]]="selectedMetricType() !== 'memory'" class="text-[10.5px] font-medium px-2.5 py-1.5 rounded cursor-pointer transition-all border-none">Mem</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Real-Time Metrics Overview Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <!-- Active CPU -->
+              <div class="bg-indigo-950/20 p-3.5 rounded-lg border border-slate-800/60 flex flex-col justify-between">
+                <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Host Total CPU Usage</span>
+                <div class="flex items-baseline gap-1 mt-1.5">
+                  <span class="text-xl font-bold text-[#38bdf8] tracking-tight">{{ totalCpuUsage().toFixed(1) }}%</span>
+                  <span class="text-[10px] text-slate-500">of 100% core capacity</span>
+                </div>
+                <div class="w-full bg-[#1e293b]/40 h-1 rounded-full mt-2.5 overflow-hidden">
+                  <div class="bg-[#38bdf8] rounded-full h-full transition-all duration-300" [style.width.%]="Math.min(100, totalCpuUsage())"></div>
+                </div>
+              </div>
+
+              <!-- Active Memory -->
+              <div class="bg-indigo-950/20 p-3.5 rounded-lg border border-slate-800/60 flex flex-col justify-between">
+                <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Host Total Memory Usage</span>
+                <div class="flex items-baseline gap-1 mt-1.5">
+                  <span class="text-xl font-bold text-[#10b981] tracking-tight">{{ totalMemUsage().toFixed(1) }} MB</span>
+                  <span class="text-[10px] text-slate-500">/ 4096 MB host limit</span>
+                </div>
+                <div class="w-full bg-[#1e293b]/40 h-1 rounded-full mt-2.5 overflow-hidden">
+                  <div class="bg-[#10b981] rounded-full h-full transition-all duration-300" [style.width.%]="(totalMemUsage() / 4096) * 100"></div>
+                </div>
+              </div>
+
+              <!-- Running Containers count info -->
+              <div class="bg-indigo-950/20 p-3.5 rounded-lg border border-slate-800/60 flex flex-col justify-between">
+                <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Virtual Overlay Slices</span>
+                <div class="flex items-baseline gap-1 mt-1.5">
+                  <span class="text-xl font-bold text-purple-400 tracking-tight">{{ runningContainersCount() }}</span>
+                  <span class="text-[10px] text-slate-500">containers running</span>
+                </div>
+                <div class="text-[10px] text-slate-400 leading-normal mt-2 select-none">
+                  Average: <span class="font-bold text-white">{{ (runningContainersCount() > 0 ? (totalCpuUsage() / runningContainersCount()).toFixed(1) : '0') }}%</span> CPU | <span class="font-bold text-white">{{ (runningContainersCount() > 0 ? (totalMemUsage() / runningContainersCount()).toFixed(0) : '0') }}M</span> RAM
+                </div>
+              </div>
+            </div>
+
+            <!-- D3 Charts Columns -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-1">
+              <!-- SVGs wrapped inside target containers we can ResizeObserve -->
+              <div class="bg-[#020617]/50 p-4 rounded-xl border border-slate-850/70 flex flex-col justify-between" id="d3-trend-wrapper">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#38bdf8]"></span>
+                    Telemetry Trend over time (D3.js Line &amp; Area Chart)
+                  </span>
+                  <span class="text-[9px] font-mono text-slate-500">Updates live (1.2s)</span>
+                </div>
+                
+                <!-- SVG container -->
+                <div class="relative w-full h-[180px] overflow-visible">
+                  <svg id="d3-trend-svg" class="w-full h-full overflow-visible"></svg>
+                  @if (hostStatsHistory.length === 0) {
+                    <div class="absolute inset-0 flex items-center justify-center text-xs text-slate-500 bg-slate-950/30 rounded-lg">
+                      Awaiting telemetry stream...
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <div class="bg-[#020617]/50 p-4 rounded-xl border border-slate-850/70 flex flex-col justify-between" id="d3-bars-wrapper">
+                <span class="text-xs font-semibold text-slate-200 block mb-2 flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
+                  Per-Container Breakdown (D3.js Comparison Bars)
+                </span>
+                
+                <!-- SVG container -->
+                <div class="relative w-full h-[180px]">
+                  <svg id="d3-bars-svg" class="w-full h-full overflow-visible"></svg>
+                  @if (runningContainersCount() === 0) {
+                    <div class="absolute inset-0 flex items-center justify-center text-xs text-slate-500 bg-slate-950/20 rounded-lg text-center p-4">
+                      <div>
+                        <p class="font-semibold text-slate-300">All containers are offline</p>
+                        <p class="text-[10px] text-slate-500 mt-1">Spin up a container to draw live resource comparison columns.</p>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
             
             <!-- Quick Tutorial Lab Guidelines -->
