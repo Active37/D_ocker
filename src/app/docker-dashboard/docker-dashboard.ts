@@ -358,6 +358,70 @@ CMD ["node", "app.js"]`);
           });
         }
       }
+
+      // Check 10: Best practice - Combine consecutive RUN instructions
+      const nextInstLine = lines.slice(idx + 1).find(nl => !nl.isEmpty && !nl.isComment);
+      if (upperInst === 'RUN' && nextInstLine && nextInstLine.instruction.toUpperCase() === 'RUN') {
+        errors.push({
+          line: l.lineNumber,
+          instruction: upperInst,
+          severity: 'warning',
+          message: `Multiple consecutive RUN commands can be combined.`,
+          type: 'consecutive_run',
+          tip: `Combine consecutive RUN instructions using '&& \\' to reduce image layer count and keep the final image size smaller.`
+        });
+      }
+
+      // Check 11: Best practice - apt-get update split
+      if (upperInst === 'RUN' && l.arguments.includes('apt-get update') && !l.arguments.includes('apt-get install')) {
+        errors.push({
+          line: l.lineNumber,
+          instruction: upperInst,
+          severity: 'warning',
+          message: `'apt-get update' should be combined with 'apt-get install' in the same RUN instruction.`,
+          type: 'apt_get_update_separated',
+          tip: `Combine 'apt-get update' and 'apt-get install' in a single RUN instruction (e.g., RUN apt-get update && apt-get install -y ...) to ensure package dependencies are downloaded from a fresh index.`
+        });
+      }
+
+      // Check 12: Best practice - missing -y flag in apt-get install
+      if (upperInst === 'RUN' && (l.arguments.includes('apt-get install') || l.arguments.includes('apt install')) && !l.arguments.includes('-y')) {
+        errors.push({
+          line: l.lineNumber,
+          instruction: upperInst,
+          severity: 'error',
+          message: `apt-get install missing '-y' (non-interactive) flag.`,
+          type: 'apt_get_missing_y',
+          tip: `Without the '-y' flag, the docker build will hang/fail, expecting interactive shell input. Add '-y'.`
+        });
+      }
+
+      // Check 13: Best practice - clear npm cache
+      if (upperInst === 'RUN' && l.arguments.includes('npm install') && !l.arguments.includes('npm cache clean')) {
+        errors.push({
+          line: l.lineNumber,
+          instruction: upperInst,
+          severity: 'warning',
+          message: `npm install does not clear the npm cache.`,
+          type: 'npm_install_no_cache_clean',
+          tip: `Add '&& npm cache clean --force' at the end of the command to remove redundant cached packages and keep the layer tiny.`
+        });
+      }
+
+      // Check 14: Preferred exec/JSON array form for CMD and ENTRYPOINT
+      if ((upperInst === 'CMD' || upperInst === 'ENTRYPOINT') && l.arguments) {
+        const trimmedArgs = l.arguments.trim();
+        if (trimmedArgs && (!trimmedArgs.startsWith('[') || !trimmedArgs.endsWith(']'))) {
+          errors.push({
+            line: l.lineNumber,
+            instruction: upperInst,
+            severity: 'warning',
+            message: `Shell form used instead of JSON/exec form for '${upperInst}'.`,
+            type: 'shell_form_cmd_entrypoint',
+            tip: `Use exec/JSON array form (e.g., ${upperInst} ["node", "server.js"]) instead of shell form to allow proper termination signal handling (SIGTERM).`
+          });
+        }
+      }
     });
     
     return errors;
@@ -392,6 +456,42 @@ CMD ["node", "app.js"]`);
       }
     } else if (error.type === 'copy_missing_dest') {
       lines[idx] = `${trimmed} ./`;
+    } else if (error.type === 'consecutive_run') {
+      let nextLineIndex = -1;
+      for (let i = idx + 1; i < lines.length; i++) {
+        const lStr = lines[i].trim();
+        if (lStr && !lStr.startsWith('#')) {
+          nextLineIndex = i;
+          break;
+        }
+      }
+      if (nextLineIndex !== -1) {
+        const nextLineTrim = lines[nextLineIndex].trim();
+        const runMatch = nextLineTrim.match(/^run\s+/i);
+        if (runMatch) {
+          const contentAfterRun = nextLineTrim.substring(runMatch[0].length);
+          lines[idx] = `${lines[idx]} && \\\n    ${contentAfterRun}`;
+          lines.splice(nextLineIndex, 1);
+        }
+      }
+    } else if (error.type === 'apt_get_missing_y') {
+      if (line.includes('apt-get install')) {
+        lines[idx] = line.replace('apt-get install', 'apt-get install -y');
+      } else if (line.includes('apt install')) {
+        lines[idx] = line.replace('apt install', 'apt install -y');
+      }
+    } else if (error.type === 'npm_install_no_cache_clean') {
+      lines[idx] = `${line} && npm cache clean --force`;
+    } else if (error.type === 'shell_form_cmd_entrypoint') {
+      const instWord = error.instruction;
+      const spaceIndex = line.toLowerCase().indexOf(instWord.toLowerCase());
+      if (spaceIndex !== -1) {
+        const prefix = line.substring(0, spaceIndex + instWord.length);
+        const argsPart = line.substring(spaceIndex + instWord.length).trim();
+        const tokens = argsPart.split(/\s+/).filter(t => t.length > 0);
+        const jsonArgs = JSON.stringify(tokens);
+        lines[idx] = `${prefix} ${jsonArgs}`;
+      }
     }
     
     this.dockerfileInput.set(lines.join('\n'));
@@ -641,6 +741,12 @@ CMD ["node", "app.js"]`);
         }
       }
     });
+
+    // Real-time Monaco editor validation markers sync effect
+    effect(() => {
+      this.dockerfileErrors();
+      this.updateMonacoMarkers();
+    });
   }
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -717,10 +823,40 @@ CMD ["node", "app.js"]`);
         if (this.dockerfileInput() !== val) {
           this.dockerfileInput.set(val);
         }
+        this.updateMonacoMarkers();
       });
+
+      this.updateMonacoMarkers();
     }).catch(err => {
       console.error('Error loading monaco editor', err);
     });
+  }
+
+  updateMonacoMarkers(): void {
+    if (typeof window !== 'undefined' && this.monacoEditorInstance) {
+      const monaco = (window as any).monaco;
+      if (monaco) {
+        const model = this.monacoEditorInstance.getModel();
+        if (model) {
+          const errors = this.dockerfileErrors();
+          const markers = errors.map(err => {
+            const lineContent = model.getLineContent(err.line) || '';
+            const startColumn = 1;
+            const endColumn = lineContent.length + 1;
+            
+            return {
+              severity: err.severity === 'error' ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+              message: `${err.message} (${err.tip})`,
+              startLineNumber: err.line,
+              startColumn: startColumn,
+              endLineNumber: err.line,
+              endColumn: endColumn
+            };
+          });
+          monaco.editor.setModelMarkers(model, 'dockerfile-linter', markers);
+        }
+      }
+    }
   }
 
   disposeMonaco(): void {
@@ -1920,28 +2056,137 @@ ${JSON.stringify({
     }
   }
 
+  private readonly dockerSubcommands = [
+    'run', 'build', 'ps', 'images', 'exec', 'stop', 'start', 'restart', 'rm', 'rmi', 'logs', 'network', 'volume', 'info', 'version', 'compose'
+  ];
+
+  private readonly dockerFlags = {
+    general: ['--help', '--version', '-H', '--host', '--debug', '-l', '--log-level'],
+    run: ['-d', '--detach', '--name', '-p', '--publish', '-v', '--volume', '-e', '--env', '--network', '--rm', '-it', '--restart', '--entrypoint', '-h', '--hostname', '-u', '--user', '-w', '--workdir'],
+    build: ['-t', '--tag', '-f', '--file', '--no-cache', '--build-arg', '--pull', '--quiet', '-q', '--target'],
+    ps: ['-a', '--all', '-q', '--quiet', '--filter', '--format', '--no-trunc', '-s', '--size'],
+    images: ['-a', '--all', '-q', '--quiet', '--digests', '--format', '--no-trunc'],
+    exec: ['-it', '-d', '--detach', '-u', '--user', '-w', '--workdir', '-e', '--env'],
+    stop: ['-t', '--time'],
+    logs: ['-f', '--follow', '--tail', '-t', '--timestamps', '--since'],
+    network: ['create', 'inspect', 'ls', 'rm', 'prune', 'connect', 'disconnect'],
+    volume: ['create', 'inspect', 'ls', 'rm', 'prune']
+  };
+
   triggerAutoComplete(event: Event) {
     event.preventDefault();
     const container = this.terminalContainer();
     if (!container) return;
 
     const val = this.termInput.value || '';
-    const tokens = val.trim().split(/\s+/);
-    if (tokens.length === 0) return;
+    const trimmedVal = val.trim();
+    const hasTrailingSpace = val.endsWith(' ');
+    const tokens = trimmedVal.split(/\s+/);
 
+    if (tokens.length > 0 && tokens[0].toLowerCase() === 'docker') {
+      // 1. Docker command autocomplete
+      if (tokens.length === 1) {
+        // Just typed "docker"
+        if (hasTrailingSpace) {
+          // Suggest subcommands
+          const prompt = `sh:${container.currentWorkdir} # ${val}`;
+          const possibilities = this.dockerSubcommands.join('   ');
+          this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
+          setTimeout(() => this.scrollToTerminalBottom(), 50);
+        } else {
+          // auto-append space of "docker "
+          this.termInput.setValue('docker ');
+        }
+        return;
+      }
+
+      const subCmd = tokens[1].toLowerCase();
+
+      // Typing the subcommand itself (e.g. "docker r" with no trailing space)
+      if (tokens.length === 2 && !hasTrailingSpace) {
+        const lastToken = tokens[1];
+        const matches = this.dockerSubcommands.filter(s => s.startsWith(lastToken));
+        if (matches.length === 1) {
+          tokens[1] = matches[0] + ' ';
+          this.termInput.setValue(tokens.join(' '));
+        } else if (matches.length > 1) {
+          const prompt = `sh:${container.currentWorkdir} # ${val}`;
+          const possibilities = matches.join('   ');
+          this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
+          setTimeout(() => this.scrollToTerminalBottom(), 50);
+        }
+        return;
+      }
+
+      // Past the subcommand (either has trailing space or typing active flags/args)
+      const flagsForSub = (this.dockerFlags as Record<string, string[]>)[subCmd] || this.dockerFlags.general;
+
+      if (hasTrailingSpace) {
+        // Suggest common flags for this subcommand
+        const prompt = `sh:${container.currentWorkdir} # ${val}`;
+        const possibilities = flagsForSub.join('   ');
+        this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
+        setTimeout(() => this.scrollToTerminalBottom(), 50);
+        return;
+      } else {
+        const lastToken = tokens[tokens.length - 1];
+        if (lastToken.startsWith('-')) {
+          const matches = flagsForSub.filter(f => f.startsWith(lastToken));
+          if (matches.length === 1) {
+            tokens[tokens.length - 1] = matches[0] + ' ';
+            this.termInput.setValue(tokens.join(' '));
+          } else if (matches.length > 1) {
+            const prompt = `sh:${container.currentWorkdir} # ${val}`;
+            const possibilities = matches.join('   ');
+            this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
+            setTimeout(() => this.scrollToTerminalBottom(), 50);
+          }
+          return;
+        } else {
+          // Dynamic completion of container names or image tags
+          if (['stop', 'start', 'restart', 'logs', 'exec', 'rm'].includes(subCmd)) {
+            const contNames = this.containers().map(c => c.name);
+            const matches = contNames.filter(name => name.startsWith(lastToken));
+            if (matches.length === 1) {
+              tokens[tokens.length - 1] = matches[0] + ' ';
+              this.termInput.setValue(tokens.join(' '));
+            } else if (matches.length > 1) {
+              const prompt = `sh:${container.currentWorkdir} # ${val}`;
+              const possibilities = matches.join('   ');
+              this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
+              setTimeout(() => this.scrollToTerminalBottom(), 50);
+            }
+            return;
+          } else if (['run', 'rmi'].includes(subCmd)) {
+            const images = this.images().map(i => i.tag);
+            const matches = images.filter(t => t.startsWith(lastToken));
+            if (matches.length === 1) {
+              tokens[tokens.length - 1] = matches[0] + ' ';
+              this.termInput.setValue(tokens.join(' '));
+            } else if (matches.length > 1) {
+              const prompt = `sh:${container.currentWorkdir} # ${val}`;
+              const possibilities = matches.join('   ');
+              this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
+              setTimeout(() => this.scrollToTerminalBottom(), 50);
+            }
+            return;
+          }
+        }
+      }
+    }
+
+    if (tokens.length === 0) return;
     const lastToken = tokens[tokens.length - 1];
     if (!lastToken) return;
-    
-    // Find files/folders in current directory starting with lastToken
+
+    // 2. Fallback: Original file/directory autocomplete
     const files = this.getFilesInDirectory(container, container.currentWorkdir);
     const matches = files.filter(f => f.name.startsWith(lastToken));
 
     if (matches.length === 1) {
-      // complete this file/folder!
       tokens[tokens.length - 1] = matches[0].name + (matches[0].type === 'dir' ? '/' : '');
       this.termInput.setValue(tokens.join(' '));
     } else if (matches.length > 1) {
-      // print matching possibilities to terminal lines
       const prompt = `sh:${container.currentWorkdir} # ${val}`;
       const possibilities = matches.map(m => m.name + (m.type === 'dir' ? '/' : '')).join('   ');
       this.termLines.update(arr => [...arr, `${prompt}`, possibilities, ' ']);
@@ -2446,6 +2691,72 @@ ${JSON.stringify({
         } else {
           responseLines = [
             `git: '${gitCmd}' is not a simulated git command. Try 'git status' or 'git clone'.`
+          ];
+        }
+        break;
+      }
+
+      case 'docker': {
+        const subSubCmd = args[0] || 'help';
+        if (subSubCmd === 'ps') {
+          const runconts = this.containers().filter(c => c.status === 'running');
+          responseLines = [
+            `CONTAINER ID   IMAGE                  COMMAND                  CREATED         STATUS         PORTS                    NAMES`,
+          ];
+          runconts.forEach(c => {
+            const shortId = c.id.slice(0, 12);
+            const truncatedImage = c.imageTag.substring(0, 20).padEnd(22, ' ');
+            const truncatedCmd = (c.cmd || 'sh').substring(0, 23).padEnd(24, ' ');
+            responseLines.push(`${shortId}   ${truncatedImage} "${truncatedCmd}"   A few mins ago   Up 4 minutes   0.0.0.0:80->80/tcp       ${c.name}`);
+          });
+          if (runconts.length === 0) {
+            responseLines.push(`No containers currently running.`);
+          }
+        } else if (subSubCmd === 'images') {
+          responseLines = [
+            `REPOSITORY             TAG       IMAGE ID       CREATED         SIZE`,
+          ];
+          this.images().forEach(img => {
+            const parts = img.tag.split(':');
+            const repo = (parts[0] || img.tag).padEnd(22, ' ');
+            const tag = (parts[1] || 'latest').padEnd(9, ' ');
+            const shortId = img.id.slice(0, 12).padEnd(14, ' ');
+            const createdVal = (img.created || '2 days ago').padEnd(14, ' ');
+            const sizeVal = img.size || '128MB';
+            responseLines.push(`${repo} ${tag} ${shortId} ${createdVal} ${sizeVal}`);
+          });
+        } else if (subSubCmd === 'version') {
+          responseLines = [
+            `Docker version 24.0.7, build afdd53b`,
+            `API version:       1.43`,
+            `Go version:        go1.20.10`,
+            `Git commit:        afdd53b`,
+            `Built:             Thu Oct 26 19:15:20 2023`,
+            `OS/Arch:           linux/amd64`,
+            `Context:           default`
+          ];
+        } else if (subSubCmd === 'info') {
+          responseLines = [
+            `Client:`,
+            `  Context:    default`,
+            `  Debug Mode: false`,
+            `Server:`,
+            `  Containers: ${this.containers().length}`,
+            `    Running: ${this.runningContainersCount()}`,
+            `    Paused: 0`,
+            `    Stopped: ${this.stoppedContainersCount()}`,
+            `  Images: ${this.images().length}`,
+            `  Server Version: 24.0.7`,
+            `  Storage Driver: overlay2`,
+            `  Operating System: Alpine Linux (Simulated Container OS)`
+          ];
+        } else {
+          responseLines = [
+            `Simulated Docker CLI Gateway:`,
+            `  docker ps              List active containers`,
+            `  docker images          Print registered images`,
+            `  docker version         Show API and build version`,
+            `  docker info            Output deep daemon metrics`
           ];
         }
         break;
