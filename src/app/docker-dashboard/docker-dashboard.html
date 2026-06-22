@@ -45,9 +45,19 @@
           <button (click)="activeTab.set('dashboard')"
             [class.bg-[#111e35]]="activeTab() === 'dashboard'"
             [class.text-[#2496ed]]="activeTab() === 'dashboard'"
-            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium">
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium"
+            id="sidebar-dashboard-btn">
             <mat-icon class="text-lg">space_dashboard</mat-icon>
             Dashboard Overview
+          </button>
+
+          <button (click)="activeTab.set('workspace')"
+            [class.bg-[#111e35]]="activeTab() === 'workspace'"
+            [class.text-[#2496ed]]="activeTab() === 'workspace'"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-[#0d182b] transition-all duration-200 font-medium"
+            id="sidebar-workspace-btn">
+            <mat-icon class="text-lg">terminal</mat-icon>
+            Workspace Console
           </button>
 
           <button (click)="activeTab.set('containers')"
@@ -109,8 +119,501 @@
     </aside>
 
     <!-- Content Workspace -->
-    <main class="flex-1 overflow-y-auto px-6 py-6 bg-[#040913]">
+    <main class="flex-grow overflow-y-auto px-6 py-6 bg-[#040913]">
       
+      <!-- TAB 1.5: WORKSPACE CONSOLE -->
+      @if (activeTab() === 'workspace') {
+        <div class="space-y-6" id="workspace-wrapper">
+          <!-- Page Header -->
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#080f1a] p-4 rounded-xl border border-slate-800" id="workspace-header">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                <span class="text-[10px] text-blue-400 font-bold tracking-wider uppercase">Interactive Developer Session</span>
+              </div>
+              <h1 class="text-xl font-bold text-slate-100 mt-0.5">3-Column Application Workspace</h1>
+              <p class="text-xs text-slate-400">Manage code, interact with shell processes, and inspect system telemetry inside a unified container playground.</p>
+            </div>
+            
+            <!-- Quick System Actions -->
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-slate-400 font-mono">
+                System: <span class="text-emerald-400 font-bold">READY</span>
+              </span>
+              <button (click)="updateD3Charts()" class="bg-[#111e35] hover:bg-[#1a2d4f] border border-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition cursor-pointer" id="workspace-refresh-charts-btn">
+                <mat-icon class="text-sm">refresh</mat-icon>
+                Re-align Charts
+              </button>
+            </div>
+          </div>
+
+          <!-- Responsive Three-Column Workspace Grid -->
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start animate-fade-in" id="workspace-grid">
+            
+            <!-- COLUMN 1: CODE EDITOR (Dockerfile Workbench) -->
+            <div class="space-y-6" id="workspace-code-editor-column">
+              <div class="bg-[#080f1a] rounded-2xl border border-slate-800 overflow-hidden shadow-lg flex flex-col h-[650px]" id="workspace-editor-card">
+                
+                <!-- Column Header -->
+                <div class="bg-[#0d182b] p-4 border-b border-slate-800 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <mat-icon class="text-blue-400">code</mat-icon>
+                    <div class="text-left">
+                      <h3 class="text-sm font-bold text-slate-100">Dockerfile Workbench</h3>
+                      <p class="text-[10px] text-slate-400">Compile & custom-build images</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Boilerplate Selector Dropdown -->
+                <div class="p-3 bg-slate-900/40 border-b border-slate-850 flex items-center justify-between gap-2">
+                  <span class="text-xs text-slate-300 font-medium">Load Template:</span>
+                  <div class="flex gap-1.5">
+                    <button (click)="selectedTemplate.set('node'); loadTemplateDockerfile('node')" 
+                      class="px-2 py-1 text-[10px] rounded border transition-colors cursor-pointer"
+                      [class.bg-blue-600]="selectedTemplate() === 'node'"
+                      [class.text-white]="selectedTemplate() === 'node'"
+                      [class.border-blue-500]="selectedTemplate() === 'node'"
+                      [class.bg-slate-800]="selectedTemplate() !== 'node'"
+                      [class.text-slate-300]="selectedTemplate() !== 'node'"
+                      [class.border-slate-700]="selectedTemplate() !== 'node'">
+                      Node.js
+                    </button>
+                    <button (click)="selectedTemplate.set('nginx'); loadTemplateDockerfile('nginx')" 
+                      class="px-2 py-1 text-[10px] rounded border transition-colors cursor-pointer"
+                      [class.bg-blue-600]="selectedTemplate() === 'nginx'"
+                      [class.text-white]="selectedTemplate() === 'nginx'"
+                      [class.border-blue-500]="selectedTemplate() === 'nginx'"
+                      [class.bg-slate-800]="selectedTemplate() !== 'nginx'"
+                      [class.text-slate-300]="selectedTemplate() !== 'nginx'"
+                      [class.border-slate-700]="selectedTemplate() !== 'nginx'">
+                      Nginx
+                    </button>
+                    <button (click)="selectedTemplate.set('postgres'); loadTemplateDockerfile('postgres')" 
+                      class="px-2 py-1 text-[10px] rounded border transition-colors cursor-pointer"
+                      [class.bg-blue-600]="selectedTemplate() === 'postgres'"
+                      [class.text-white]="selectedTemplate() === 'postgres'"
+                      [class.border-blue-500]="selectedTemplate() === 'postgres'"
+                      [class.bg-slate-800]="selectedTemplate() !== 'postgres'"
+                      [class.text-slate-300]="selectedTemplate() !== 'postgres'"
+                      [class.border-slate-700]="selectedTemplate() !== 'postgres'">
+                      Postgres
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Editor Controls Header tabs -->
+                <div class="px-4 py-2 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between text-xs">
+                  <div class="flex gap-2">
+                    <button (click)="editorSubTab.set('edit')" 
+                      class="text-slate-300 font-semibold uppercase tracking-wider text-[10px] hover:text-[#2496ed] cursor-pointer"
+                      [class.text-[#2496ed]]="editorSubTab() === 'edit'">
+                      Line Editor
+                    </button>
+                    <span class="text-slate-700">|</span>
+                    <button (click)="editorSubTab.set('preview')" 
+                      class="text-slate-400 font-semibold uppercase tracking-wider text-[10px] hover:text-[#2496ed] cursor-pointer"
+                      [class.text-[#2496ed]]="editorSubTab() === 'preview'">
+                      Aesthetic Syntax
+                    </button>
+                  </div>
+                  <span class="text-[9px] font-mono text-slate-500 uppercase">utf-8</span>
+                </div>
+
+                <!-- Editor Content area -->
+                <div class="flex-grow flex flex-col relative bg-[#040812]">
+                  @if (editorSubTab() === 'edit') {
+                    <textarea [value]="dockerfileInput()" (input)="dockerfileInput.set($any($event.target).value)"
+                      class="flex-grow w-full bg-slate-950 text-slate-100 font-mono text-xs p-4 focus:outline-none focus:ring-0 leading-relaxed resize-none border-none select-text" 
+                      placeholder="Write your Dockerfile instructions here...">
+                    </textarea>
+                  } @else {
+                    <pre class="flex-grow w-full p-4 overflow-y-auto font-mono text-xs text-left bg-slate-950 text-slate-350 select-text whitespace-pre leading-relaxed border-none rounded-none" 
+                      [innerHTML]="highlightDockerfile(dockerfileInput())">
+                    </pre>
+                  }
+                </div>
+
+                <!-- Linter / Diagnostics Section -->
+                <div class="border-t border-slate-800 bg-[#060b14] p-3">
+                  <div class="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 font-sans">
+                    <span>Diagnostics / Recommendations</span>
+                    <span class="bg-[#111e35] text-blue-400 border border-slate-800 px-1.5 py-0.5 rounded text-[8px] uppercase">Linter Active</span>
+                  </div>
+                  
+                  <div class="space-y-1.5 max-h-[140px] overflow-y-auto">
+                    @if (dockerfileErrors().length === 0) {
+                      <div class="flex items-center gap-2 text-emerald-400 text-xs p-1">
+                        <mat-icon class="text-sm">check_circle</mat-icon>
+                        <span class="text-left font-sans">Dockerfile matches security best-practices. Ready to build cleanly.</span>
+                      </div>
+                    } @else {
+                      @for (rec of dockerfileErrors(); track rec.line + rec.type) {
+                        <div class="bg-[#111e34]/70 border border-slate-800/80 rounded p-2 text-left">
+                          <div class="flex justify-between items-start gap-1">
+                            <span class="text-[11px] font-semibold text-rose-400 flex items-center gap-1 font-mono">
+                              <mat-icon class="text-[12px] h-3 w-4">warning</mat-icon>
+                              Line {{ rec.line }} [{{ rec.instruction }}]
+                            </span>
+                            <button (click)="applyQuickFix(rec)" class="bg-[#1e293b] hover:bg-slate-800 text-slate-100 text-[9px] px-1.5 py-0.5 rounded border border-slate-700 font-sans cursor-pointer transition">
+                              Apply Quick-Fix
+                            </button>
+                          </div>
+                          <p class="text-[10px] text-slate-300 mt-1 font-mono mb-1 text-left leading-relaxed">{{ rec.message }}</p>
+                          <p class="text-[9px] text-slate-400 font-sans italic text-left">Tip: {{ rec.tip }}</p>
+                        </div>
+                      }
+                    }
+                  </div>
+                </div>
+
+                <!-- Action Build Footer -->
+                <div class="bg-[#0c1322] p-3 border-t border-slate-800 space-y-2">
+                  <div class="grid grid-cols-2 gap-2 text-left">
+                    <div>
+                      <label for="workspace-image-tag-input" class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Image Tag</label>
+                      <input id="workspace-image-tag-input" [formControl]="newImageTag" type="text" placeholder="e.g. custom-app:latest" 
+                        class="w-full bg-[#050912] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-slate-700">
+                    </div>
+                    <div>
+                      <span class="block text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Build Target</span>
+                      <div class="text-xs text-slate-300 font-mono py-1.5 leading-relaxed truncate px-1">
+                        Docker Daemon Socket
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button (click)="simulateBuild()" [disabled]="isBuilding()" 
+                    class="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-550 font-bold text-xs py-2 px-4 rounded-xl border border-transparent cursor-pointer flex items-center justify-center gap-2 transition shadow-md"
+                    id="workspace-execute-build-btn">
+                    @if (isBuilding()) {
+                      <span class="w-3.5 h-3.5 border-2 border-slate-400 border-t-white rounded-full animate-spin"></span>
+                      <span>Compiling Layers...</span>
+                    } @else {
+                      <mat-icon class="text-sm">build_circle</mat-icon>
+                      <span>Execute Docker Build</span>
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- COLUMN 2: INTERACTIVE BASH TERMINAL -->
+            <div class="space-y-6" id="workspace-terminal-column">
+              <div class="bg-[#080f1a] rounded-2xl border border-slate-800 overflow-hidden shadow-lg flex flex-col h-[650px]" id="workspace-terminal-card">
+                
+                <!-- Column Header with container selection -->
+                <div class="bg-[#0d182b] p-4 border-b border-slate-800 flex flex-col gap-3">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <mat-icon class="text-emerald-400">terminal</mat-icon>
+                      <div class="text-left">
+                        <h3 class="text-sm font-bold text-slate-100">Xterm Interactive Console</h3>
+                        <p class="text-[10px] text-slate-400">Target host bridge gateway process</p>
+                      </div>
+                    </div>
+                    
+                    <!-- Theme picker -->
+                    <div class="flex items-center gap-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
+                      <button (click)="terminalTheme.set('cyan')" title="Cyan theme" class="w-3.5 h-3.5 rounded-full bg-cyan-400 border border-transparent opacity-80 hover:opacity-100 cursor-pointer" [class.ring-2]="terminalTheme() === 'cyan'" [class.ring-white]="terminalTheme() === 'cyan'"></button>
+                      <button (click)="terminalTheme.set('green')" title="Green matrix theme" class="w-3.5 h-3.5 rounded-full bg-emerald-500 border border-transparent opacity-80 hover:opacity-100 cursor-pointer" [class.ring-2]="terminalTheme() === 'green'" [class.ring-white]="terminalTheme() === 'green'"></button>
+                      <button (click)="terminalTheme.set('amber')" title="Amber CRT theme" class="w-3.5 h-3.5 rounded-full bg-amber-500 border border-transparent opacity-80 hover:opacity-100 cursor-pointer" [class.ring-2]="terminalTheme() === 'amber'" [class.ring-white]="terminalTheme() === 'amber'"></button>
+                      <button (click)="terminalTheme.set('classic')" title="Monochrome theme" class="w-3.5 h-3.5 rounded-full bg-slate-300 border border-transparent opacity-80 hover:opacity-100 cursor-pointer" [class.ring-2]="terminalTheme() === 'classic'" [class.ring-white]="terminalTheme() === 'classic'"></button>
+                    </div>
+                  </div>
+
+                  <!-- Container switch selector bar -->
+                  <div class="flex items-center gap-2 text-left">
+                    <span class="text-[10px] text-slate-400 font-mono">Shell target:</span>
+                    <select [value]="terminalContainer()?.id || ''" 
+                      (change)="changeTerminalConnection($any($event.target).value)"
+                      class="flex-grow bg-[#050912] text-xs text-slate-200 border border-slate-850 rounded-lg px-2 py-1.5 focus:outline-none focus:border-slate-700 font-mono">
+                      @if (!terminalContainer()) {
+                        <option value="">-- No Active Shell Connection --</option>
+                      }
+                      @for (c of containers(); track c.id) {
+                        @if (c.status === 'running') {
+                          <option [value]="c.id">{{ c.name }} [IP: {{ c.ipAddress }}]</option>
+                        } @else {
+                          <option [value]="c.id" disabled>{{ c.name }} [STOPPED]</option>
+                        }
+                      }
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Live terminal window -->
+                <div class="flex-grow flex flex-col relative bg-slate-950 overflow-hidden">
+                  @if (terminalContainer()) {
+                    @if (termActiveApp() === 'htop') {
+                      <!-- HTOP Simulated CPU Interface -->
+                      <div class="flex-grow p-4 bg-black text-xs font-mono select-none flex flex-col justify-between text-left h-[400px]">
+                        <div class="space-y-1">
+                          <div class="flex items-center gap-1.5 text-slate-400">
+                            <span class="w-14">CPU [</span>
+                            <div class="flex-grow bg-slate-900 border border-slate-800 rounded h-3 overflow-hidden flex relative">
+                              <div class="bg-blue-600 h-full tracking-wide text-[9px] text-center text-white" 
+                                [style.width.%]="terminalContainer()?.stats?.cpu || 10"></div>
+                            </div>
+                            <span class="w-12 text-right">{{ (terminalContainer()?.stats?.cpu || 10).toFixed(1) }}%</span>
+                          </div>
+                          <div class="flex items-center gap-1.5 text-slate-400">
+                            <span class="w-14">Mem [</span>
+                            <div class="flex-grow bg-slate-900 border border-slate-800 rounded h-3 overflow-hidden flex relative">
+                              <div class="bg-emerald-600 h-full tracking-wide text-[9px] text-center text-white" 
+                                [style.width.%]="((terminalContainer()?.stats?.memory || 20) / (terminalContainer()?.stats?.memoryLimit || 512)) * 100"></div>
+                            </div>
+                            <span class="w-12 text-right">{{ (terminalContainer()?.stats?.memory || 20).toFixed(1) }}M</span>
+                          </div>
+                        </div>
+
+                        <!-- HTOP Process List -->
+                        <div class="flex-grow overflow-y-auto mt-4 border border-slate-800 bg-slate-950 rounded p-2 text-[10px]">
+                          <table class="w-full text-left font-mono">
+                            <thead>
+                              <tr class="bg-[#0b1324] text-[#2496ed]">
+                                <th class="p-1">PID</th>
+                                <th class="p-1">USER</th>
+                                <th class="p-1">CPU%</th>
+                                <th class="p-1">MEM%</th>
+                                <th class="p-1">COMMAND</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr class="text-white border-b border-slate-900">
+                                <td class="p-1">1</td>
+                                <td class="p-1">root</td>
+                                <td class="p-1 text-blue-400">{{ (terminalContainer()?.stats?.cpu || 0.1).toFixed(1) }}</td>
+                                <td class="p-1 text-emerald-400">{{ ((terminalContainer()?.stats?.memory || 10) / 10).toFixed(1) }}</td>
+                                <td class="p-1 truncate text-slate-300 font-mono">{{ terminalContainer()?.cmd }}</td>
+                              </tr>
+                              <tr class="text-slate-400 border-b border-slate-900">
+                                <td class="p-1">12</td>
+                                <td class="p-1">root</td>
+                                <td class="p-1">0.0</td>
+                                <td class="p-1">0.1</td>
+                                <td class="p-1">sh -i</td>
+                              </tr>
+                              <tr class="text-slate-400">
+                                <td class="p-1">24</td>
+                                <td class="p-1">root</td>
+                                <td class="p-1">0.0</td>
+                                <td class="p-1">1.2</td>
+                                <td class="p-1 text-amber-500 font-semibold font-mono">htop</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div class="mt-2 text-right">
+                          <button (click)="termActiveApp.set(null)" class="bg-rose-600 hover:bg-rose-500 text-[9px] font-bold text-white py-0.5 px-2 rounded cursor-pointer uppercase border-none">
+                            Close Htop
+                          </button>
+                        </div>
+                      </div>
+                    } @else {
+                      <!-- Std Console -->
+                      <div #terminalBox class="flex-grow p-4 font-mono text-[11px] h-[390px] overflow-y-auto space-y-1 text-left select-text"
+                        [class.bg-[#020a06]]="terminalTheme() === 'green'" [class.text-emerald-400]="terminalTheme() === 'green'"
+                        [class.bg-[#0f0701]]="terminalTheme() === 'amber'" [class.text-amber-500]="terminalTheme() === 'amber'"
+                        [class.bg-[#002b36]]="terminalTheme() === 'solarized'" [class.text-[#93a1a1]]="terminalTheme() === 'solarized'"
+                        [class.bg-[#1e1e1e]]="terminalTheme() === 'classic'" [class.text-slate-100]="terminalTheme() === 'classic'"
+                        [class.bg-slate-950]="terminalTheme() === 'cyan'" [class.text-cyan-400]="terminalTheme() === 'cyan'">
+                        @for (line of termLines(); track $index) {
+                          <div class="whitespace-pre-wrap leading-relaxed select-text">{{ line }}</div>
+                        }
+                      </div>
+
+                      <!-- Shell inputs -->
+                      <div class="p-3 bg-[#0c1322] border-t border-slate-800 flex items-center gap-2 font-mono">
+                        <span class="text-[#2496ed] text-xs font-bold font-mono">
+                          sh:{{ terminalContainer()?.currentWorkdir }} #
+                        </span>
+                        <input [formControl]="termInput" 
+                          (keyup.enter)="executeTermCommand()" 
+                          (keydown.arrowup)="navigateHistory('up', $event)"
+                          (keydown.arrowdown)="navigateHistory('down', $event)"
+                          (keydown.tab)="triggerAutoComplete($event)"
+                          placeholder="ls, cd, pwd, ping, curl, tree, apt-get..." 
+                          class="flex-grow bg-transparent text-slate-100 placeholder-slate-600 text-xs font-mono focus:outline-none focus:ring-0 ring-0 focus:border-transparent accent-transparent">
+                        <button (click)="executeTermCommand()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg cursor-pointer leading-normal flex items-center gap-1 font-sans border border-transparent">
+                          Submit
+                          <mat-icon class="text-[11px] font-bold">keyboard_return</mat-icon>
+                        </button>
+                      </div>
+                    }
+                  } @else {
+                    <div class="flex-grow flex flex-col items-center justify-center p-8 text-center text-slate-400 max-w-sm mx-auto h-[400px]">
+                      <mat-icon class="text-4xl text-slate-600 mb-2">terminal_off</mat-icon>
+                      <h4 class="text-sm font-bold text-slate-200 font-sans">No Target Shell Active</h4>
+                      <p class="text-[11px] text-slate-400 mt-1 mb-4 leading-normal font-sans">The terminal needs to bind to a running container instance. Choose or restart a container to mount its prompt.</p>
+                      
+                      @if (containers().length > 0) {
+                        <div class="space-y-2 w-full">
+                          <p class="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Launchable Clusters</p>
+                          @for (c of containers(); track c.id) {
+                            @if (c.status !== 'running') {
+                              <button (click)="toggleContainer(c.id); changeTerminalConnection(c.id)" class="w-full bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 text-[10px] px-3 py-2 rounded-lg flex items-center justify-between transition cursor-pointer">
+                                <span class="flex items-center gap-2 font-mono">
+                                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                  {{ c.name }}
+                                </span>
+                                <span class="text-blue-400 font-bold uppercase text-[8.5px] flex items-center gap-1 font-sans">
+                                  Boot & Bind
+                                  <mat-icon class="text-[10px]">play_arrow</mat-icon>
+                                </span>
+                              </button>
+                            }
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+
+                <!-- Footer suggestions panel -->
+                <div class="p-3 bg-slate-900/40 border-t border-slate-800">
+                  <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-left">Quick Command Helpers</div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <button [disabled]="!terminalContainer()" (click)="termInput.setValue('help'); executeTermCommand()" class="bg-slate-850 hover:bg-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600 text-slate-300 text-[10px] px-2 py-1 rounded cursor-pointer font-mono border border-slate-700/60 leading-none">help</button>
+                    <button [disabled]="!terminalContainer()" (click)="termInput.setValue('ls -la'); executeTermCommand()" class="bg-slate-850 hover:bg-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600 text-slate-300 text-[10px] px-2 py-1 rounded cursor-pointer font-mono border border-slate-700/60 leading-none">ls -la</button>
+                    <button [disabled]="!terminalContainer()" (click)="termInput.setValue('ps'); executeTermCommand()" class="bg-slate-850 hover:bg-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600 text-slate-300 text-[10px] px-2 py-1 rounded cursor-pointer font-mono border border-slate-700/60 leading-none">ps</button>
+                    <button [disabled]="!terminalContainer()" (click)="termInput.setValue('top'); executeTermCommand()" class="bg-slate-850 hover:bg-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600 text-slate-300 text-[10px] px-2 py-1 rounded cursor-pointer font-mono border border-slate-700/60 leading-none">top / htop</button>
+                    <button [disabled]="!terminalContainer()" (click)="termInput.setValue('apt-get install figlet'); executeTermCommand()" class="bg-slate-850 hover:bg-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600 text-slate-300 text-[10px] px-2 py-1 rounded cursor-pointer font-mono border border-slate-700/60 leading-none">apt-get figlet</button>
+                    <button [disabled]="!terminalContainer()" (click)="termInput.setValue('clear'); executeTermCommand()" class="bg-slate-850 hover:bg-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600 text-slate-300 text-[10px] px-2 py-1 rounded cursor-pointer font-mono border border-slate-700/60 leading-none">clear</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- COLUMN 3: RESOURCE INSPECTOR (D3 telemetry and process loads) -->
+            <div class="space-y-6" id="workspace-resource-inspector-column">
+              <div class="bg-[#080f1a] rounded-2xl border border-slate-800 overflow-hidden shadow-lg p-4 h-[650px] overflow-y-auto space-y-5" id="workspace-inspector-card">
+                
+                <!-- Column Header -->
+                <div class="flex items-center gap-2 border-b border-slate-850 pb-3">
+                  <mat-icon class="text-blue-400">query_stats</mat-icon>
+                  <div class="text-left">
+                    <h3 class="text-sm font-bold text-slate-100 font-sans">Telemetry & Performance</h3>
+                    <p class="text-[10px] text-slate-400 font-sans">Live-updating D3.js load tracking</p>
+                  </div>
+                </div>
+
+                <!-- Host aggregate specs -->
+                <div class="grid grid-cols-2 gap-3 text-left">
+                  <div class="bg-slate-900/30 border border-slate-850 rounded-xl p-3">
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block leading-none">Total CPU Load</span>
+                    <span class="text-lg font-mono font-bold text-sky-400 block mt-1">{{ totalCpuUsage().toFixed(1) }}%</span>
+                    <div class="w-full bg-slate-950 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div class="bg-sky-450 h-full rounded-full" [style.width.%]="Math.min(100, totalCpuUsage())"></div>
+                    </div>
+                  </div>
+                  
+                  <div class="bg-slate-900/30 border border-slate-850 rounded-xl p-3">
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block leading-none">Total Memory Usage</span>
+                    <span class="text-lg font-mono font-bold text-emerald-400 block mt-1">{{ totalMemUsage().toFixed(1) }}M</span>
+                    <div class="w-full bg-slate-950 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div class="bg-emerald-455 h-full rounded-full" [style.width.%]="Math.min(100, (totalMemUsage() / 1536) * 100)"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Chart 1: Host Stats Over Time Trend (SVG wrapper) -->
+                <div class="bg-slate-900/40 border border-slate-850 rounded-xl p-3 text-left" id="workspace-trend-card">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Metrics Historical Area</h4>
+                    <span class="text-[8px] text-[#2496ed] font-bold uppercase bg-blue-900/20 px-1 rounded flex items-center gap-0.5">
+                      <span class="w-1 h-1 rounded-full bg-blue-500 animate-ping"></span>
+                      D3 Dynamic
+                    </span>
+                  </div>
+                  
+                  <div id="d3-workspace-trend-wrapper" class="w-full h-32 relative flex items-center justify-center bg-slate-950/40 rounded-lg">
+                    <svg id="d3-workspace-trend-svg" class="w-full h-full block overflow-visible"></svg>
+                    @if (hostStatsHistory.length === 0) {
+                      <span class="absolute text-[10px] text-slate-600 font-mono">Calibrating indicators...</span>
+                    }
+                  </div>
+                </div>
+
+                <!-- Chart 2: Per Container Breakdown Comparisons -->
+                <div class="bg-slate-900/40 border border-slate-850 rounded-xl p-3 text-left" id="workspace-breakdown-card">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-[10px] font-bold text-slate-300 uppercase tracking-wider font-sans">Container Micro-Slices</h4>
+                    <span class="text-[8px] font-mono text-slate-500">Left=CPU, Right=Mem</span>
+                  </div>
+                  
+                  <div id="d3-workspace-bars-wrapper" class="w-full h-32 relative flex items-center justify-center bg-slate-950/40 rounded-lg">
+                    <svg id="d3-workspace-bars-svg" class="w-full h-full block overflow-visible"></svg>
+                    @if (runningContainers().length === 0) {
+                      <span class="absolute text-[10px] text-rose-500/80 font-mono">All container states stopped</span>
+                    }
+                  </div>
+                </div>
+
+                <!-- Interactive Containers control lists -->
+                <div class="space-y-2 text-left">
+                  <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Container Process Control</div>
+                  
+                  <div class="space-y-1.5">
+                    @for (c of containers(); track c.id) {
+                      <div class="bg-[#050a11] border border-slate-850 p-2.5 rounded-xl flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                          <span class="w-2 h-2 rounded-full" 
+                            [class.bg-emerald-500]="c.status === 'running'" 
+                            [class.bg-slate-500]="c.status !== 'running'"
+                            [class.animate-pulse]="c.status === 'running'">
+                          </span>
+                          <div class="text-left leading-tight">
+                            <h5 class="text-xs font-semibold text-slate-200">{{ c.name }}</h5>
+                            <p class="text-[9px] text-slate-500 font-mono">{{ c.imageTag }}</p>
+                          </div>
+                        </div>
+
+                        <!-- Mini performance readouts -->
+                        @if (c.status === 'running') {
+                          <div class="text-right text-[10px] font-mono pr-2">
+                            <div class="text-sky-400 leading-none">cpu: {{ (c.stats?.cpu || 0).toFixed(1) }}%</div>
+                            <div class="text-emerald-400 leading-none mt-1">mem: {{ (c.stats?.memory || 0).toFixed(0) }}M</div>
+                          </div>
+                        }
+
+                        <!-- Quick control actions buttons -->
+                        <div class="flex items-center gap-1">
+                          <button (click)="toggleContainer(c.id)" 
+                            [title]="c.status === 'running' ? 'Power Down Container' : 'Start Container Process'"
+                            class="p-1 rounded bg-[#0b1323] hover:bg-slate-850 border border-slate-800 text-slate-200 transition cursor-pointer flex items-center">
+                            @if (c.status === 'running') {
+                              <mat-icon class="text-sm text-amber-500">pause_circle</mat-icon>
+                            } @else {
+                              <mat-icon class="text-sm text-emerald-500">play_arrow</mat-icon>
+                            }
+                          </button>
+                          
+                          <button (click)="restartContainer(c.id)" [disabled]="c.status !== 'running'"
+                            title="Hard Reboot"
+                            class="p-1 rounded bg-[#0b1323] hover:bg-slate-850 border border-slate-850 text-slate-200 disabled:opacity-40 transition cursor-pointer flex items-center">
+                            <mat-icon class="text-sm text-blue-400">restart_alt</mat-icon>
+                          </button>
+
+                          <button (click)="openTerminal(c)" [disabled]="c.status !== 'running'"
+                            title="Mount Shell Console to Column 2"
+                            class="p-1 rounded bg-[#0b1323] hover:bg-slate-850 border border-slate-850 text-slate-200 disabled:opacity-40 transition cursor-pointer flex items-center">
+                            <mat-icon class="text-sm text-cyan-400">terminal</mat-icon>
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      }
+
       <!-- TAB 1: DASHBOARD OVERVIEW -->
       @if (activeTab() === 'dashboard') {
         <div class="space-y-6">

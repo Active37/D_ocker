@@ -99,7 +99,7 @@ export class DockerDashboard implements OnDestroy, AfterViewInit {
   public cacheService = inject(DockerCacheService);
 
   // Active Panel Navigation State
-  activeTab = signal<'dashboard' | 'containers' | 'images' | 'volumes' | 'networks' | 'copilot'>('dashboard');
+  activeTab = signal<'dashboard' | 'containers' | 'images' | 'volumes' | 'networks' | 'copilot' | 'workspace'>('workspace');
 
   // --- D3 Dashboard Metrics State ---
   selectedMetricType = signal<'both' | 'cpu' | 'memory'>('both');
@@ -603,7 +603,7 @@ CMD ["node", "app.js"]`);
       const tab = this.activeTab();
       this.selectedMetricType();
 
-      if (tab !== 'dashboard') return;
+      if (tab !== 'dashboard' && tab !== 'workspace') return;
 
       const newPoint = {
         timestamp: new Date(),
@@ -624,6 +624,14 @@ CMD ["node", "app.js"]`);
   ngAfterViewInit() {
     this.scrollToTerminalBottom();
     this.initResizeObserver();
+    
+    // Automatically select first running container for workspace terminal if none selected
+    if (!this.terminalContainer()) {
+      const running = this.containers().find(c => c.status === 'running');
+      if (running) {
+        this.openTerminal(running);
+      }
+    }
   }
 
   ngOnDestroy() {
@@ -2583,24 +2591,34 @@ ${JSON.stringify({
   initResizeObserver() {
     if (typeof window === 'undefined') return;
 
-    const trendWrapper = document.getElementById('d3-trend-wrapper');
-    const barsWrapper = document.getElementById('d3-bars-wrapper');
-
     this.resizeObserver = new ResizeObserver(() => {
       this.updateD3Charts();
     });
 
-    if (trendWrapper) this.resizeObserver.observe(trendWrapper);
-    if (barsWrapper) this.resizeObserver.observe(barsWrapper);
+    const elementsToObserve = [
+      'd3-trend-wrapper',
+      'd3-bars-wrapper',
+      'd3-workspace-trend-wrapper',
+      'd3-workspace-bars-wrapper'
+    ];
+
+    for (const id of elementsToObserve) {
+      const el = document.getElementById(id);
+      if (el) {
+        this.resizeObserver.observe(el);
+      }
+    }
   }
 
   updateD3Charts() {
-    this.renderTrendChart();
-    this.renderBreakdownChart();
+    this.renderTrendChart('#d3-trend-svg');
+    this.renderTrendChart('#d3-workspace-trend-svg');
+    this.renderBreakdownChart('#d3-bars-svg');
+    this.renderBreakdownChart('#d3-workspace-bars-svg');
   }
 
-  renderTrendChart() {
-    const svg = d3.select('#d3-trend-svg');
+  renderTrendChart(selector: string) {
+    const svg = d3.select(selector);
     svg.selectAll('*').remove();
 
     if (this.hostStatsHistory.length === 0) {
@@ -2788,8 +2806,8 @@ ${JSON.stringify({
     }
   }
 
-  renderBreakdownChart() {
-    const svg = d3.select('#d3-bars-svg');
+  renderBreakdownChart(selector: string) {
+    const svg = d3.select(selector);
     svg.selectAll('*').remove();
 
     const activeConts = this.runningContainers();
