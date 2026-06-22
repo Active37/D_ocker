@@ -624,7 +624,112 @@ CMD ["node", "app.js"]`);
       // Schedule canvas update
       setTimeout(() => this.updateD3Charts(), 50);
     });
+
+    // Monaco editor synchronization & initialization effect
+    effect(() => {
+      this.dockerfileInput();
+      const tab = this.activeTab();
+      const subTab = this.editorSubTab();
+
+      if (typeof window !== 'undefined') {
+        if (tab === 'workspace' && subTab === 'edit') {
+          setTimeout(() => {
+            this.initMonacoForce();
+          }, 100);
+        } else {
+          this.disposeMonaco();
+        }
+      }
+    });
   }
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  private monacoEditorInstance: any = null;
+
+  loadMonaco(): Promise<any> {
+    if (typeof window === 'undefined') {
+      return Promise.reject('SSR Environment');
+    }
+    if ((window as any).monaco) {
+      return Promise.resolve((window as any).monaco);
+    }
+    return new Promise((resolve, reject) => {
+      if ((window as any).require) {
+        (window as any).require.config({
+          paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }
+        });
+        (window as any).require(['vs/editor/editor.main'], () => {
+          resolve((window as any).monaco);
+        });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.js';
+      script.onload = () => {
+        (window as any).require.config({
+          paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }
+        });
+        (window as any).require(['vs/editor/editor.main'], () => {
+          resolve((window as any).monaco);
+        });
+      };
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
+  }
+
+  initMonacoForce(): void {
+    if (typeof window === 'undefined') return;
+    const container = document.getElementById('monaco-editor-container');
+    if (!container) return;
+
+    if (this.monacoEditorInstance) {
+      const val = this.dockerfileInput();
+      if (this.monacoEditorInstance.getValue() !== val) {
+        this.monacoEditorInstance.setValue(val);
+      }
+      return;
+    }
+
+    this.loadMonaco().then((monaco) => {
+      const updatedContainer = document.getElementById('monaco-editor-container');
+      if (!updatedContainer) return;
+
+      this.monacoEditorInstance = monaco.editor.create(updatedContainer, {
+        value: this.dockerfileInput(),
+        language: 'dockerfile',
+        theme: 'vs-dark',
+        automaticLayout: true,
+        minimap: { enabled: false },
+        fontSize: 12,
+        lineNumbers: 'on',
+        cursorBlinking: 'smooth',
+        scrollbar: {
+          vertical: 'visible',
+          horizontal: 'visible'
+        },
+        padding: { top: 8, bottom: 8 }
+      });
+
+      this.monacoEditorInstance.onDidChangeModelContent(() => {
+        const val = this.monacoEditorInstance.getValue();
+        if (this.dockerfileInput() !== val) {
+          this.dockerfileInput.set(val);
+        }
+      });
+    }).catch(err => {
+      console.error('Error loading monaco editor', err);
+    });
+  }
+
+  disposeMonaco(): void {
+    if (this.monacoEditorInstance) {
+      this.monacoEditorInstance.dispose();
+      this.monacoEditorInstance = null;
+    }
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   ngAfterViewInit() {
     this.scrollToTerminalBottom();
@@ -646,6 +751,7 @@ CMD ["node", "app.js"]`);
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
     }
+    this.disposeMonaco();
   }
 
   // --- Seed Initial Docker Environment ---

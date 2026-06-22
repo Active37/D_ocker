@@ -221,12 +221,9 @@
                 </div>
 
                 <!-- Editor Content area -->
-                <div class="flex-grow flex flex-col relative bg-[#040812]">
+                <div class="flex-grow flex flex-col relative bg-[#040812] min-h-[400px]">
                   @if (editorSubTab() === 'edit') {
-                    <textarea [value]="dockerfileInput()" (input)="dockerfileInput.set($any($event.target).value)"
-                      class="flex-grow w-full bg-slate-950 text-slate-100 font-mono text-xs p-4 focus:outline-none focus:ring-0 leading-relaxed resize-none border-none select-text" 
-                      placeholder="Write your Dockerfile instructions here...">
-                    </textarea>
+                    <div id="monaco-editor-container" class="flex-grow w-full text-left" style="min-height: 400px;"></div>
                   } @else {
                     <pre class="flex-grow w-full p-4 overflow-y-auto font-mono text-xs text-left bg-slate-950 text-slate-350 select-text whitespace-pre leading-relaxed border-none rounded-none" 
                       [innerHTML]="highlightDockerfile(dockerfileInput())">
