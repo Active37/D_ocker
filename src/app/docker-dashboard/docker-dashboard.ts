@@ -171,6 +171,77 @@ CMD ["node", "app.js"]`);
   buildProgress = signal<number>(0);
   selectedTemplate = signal<string>('node');
 
+  // --- Enhanced Real-Time Log Viewer States ---
+  buildTimeElapsed = signal<number>(0);
+  buildLogSearchQuery = signal<string>('');
+  buildLogFilterSeverity = signal<string>('all'); // 'all', 'info', 'warn', 'success', 'cache'
+  autoScrollLogs = signal<boolean>(true);
+  logCopied = signal<boolean>(false);
+  
+  // Track detailed state of each build step
+  buildTimelineSteps = signal<{
+    index: number;
+    instruction: string;
+    arguments: string;
+    status: 'pending' | 'running' | 'completed' | 'cached';
+    durationMs?: number;
+    hash?: string;
+  }[]>([]);
+
+  // Active step pointer
+  activeBuildStepIndex = signal<number>(-1);
+
+  filteredBuildLogs = computed(() => {
+    const query = this.buildLogSearchQuery().toLowerCase().trim();
+    const filter = this.buildLogFilterSeverity();
+    const logs = this.buildLogs();
+    
+    return logs.filter(line => {
+      // search query match
+      if (query && !line.toLowerCase().includes(query)) {
+        return false;
+      }
+      
+      // severity match
+      if (filter === 'all') return true;
+      if (filter === 'info') return !line.includes('warning') && !line.includes('Error') && !line.startsWith('Step') && !line.includes('🟢');
+      if (filter === 'warn') {
+        const lower = line.toLowerCase();
+        return lower.includes('warning') || lower.includes('error') || lower.includes('failed') || line.includes('🔴') || line.includes('⚠️');
+      }
+      if (filter === 'cache') return line.toLowerCase().includes('cache');
+      if (filter === 'success') return line.includes('🟢') || line.includes('Successfully') || line.toLowerCase().includes('complete');
+      return true;
+    });
+  });
+
+  clearBuildLogs(): void {
+    this.buildLogs.set([]);
+  }
+
+  copyBuildLogs(): void {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(this.buildLogs().join('\n')).then(() => {
+        this.logCopied.set(true);
+        setTimeout(() => this.logCopied.set(false), 2000);
+      });
+    }
+  }
+
+  downloadBuildLogs(): void {
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const blob = new Blob([this.buildLogs().join('\n')], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `docker_build_${this.newImageTag.value || 'image'}.log`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  }
+
   // --- Real-time Dockerfile Analysis & Linter ---
   editorSubTab = signal<'edit' | 'preview'>('edit');
   rightPaneSubTab = signal<'layers' | 'logs'>('layers');
@@ -746,6 +817,19 @@ CMD ["node", "app.js"]`);
     effect(() => {
       this.dockerfileErrors();
       this.updateMonacoMarkers();
+    });
+
+    // Auto-scroll build logs on live stream updates
+    effect(() => {
+      this.buildLogs();
+      if (typeof document !== 'undefined') {
+        setTimeout(() => {
+          const container = document.getElementById('console-logs-container');
+          if (container) {
+            container.scrollTop = container.scrollHeight;
+          }
+        }, 30);
+      }
     });
   }
 
@@ -1674,12 +1758,10 @@ CMD ["python3", "-m", "http.server", "8000"]`);
     }
 
     this.isBuilding.set(true);
-    this.buildProgress.set(5);
-    this.buildLogs.set([
-      `Sending build context to Docker daemon  3.584 kB`,
-      `[Docker Daemon Engine] Parsing local multi-stage instructions...`,
-      `[Docker Cache System] Evaluating layer dependency hashes...`
-    ]);
+    this.buildProgress.set(2);
+    this.buildLogs.set([]);
+    this.buildTimeElapsed.set(0);
+    this.activeBuildStepIndex.set(0);
 
     // Parse main lines from Editor signal, ignoring empty links and comment lines
     const dockerfileRaw = this.dockerfileInput();
@@ -1687,14 +1769,152 @@ CMD ["python3", "-m", "http.server", "8000"]`);
       .map(l => l.trim())
       .filter(line => line !== '' && !line.startsWith('#'));
 
+    if (cleanLines.length === 0) {
+      this.buildLogs.set(['🔴 Error: Dockerfile has no action instructions.']);
+      this.isBuilding.set(false);
+      return;
+    }
+
+    // Set timeline steps info reactive array
+    this.buildTimelineSteps.set(cleanLines.map((line, idx) => {
+      const spaceIdx = line.indexOf(' ');
+      const inst = spaceIdx > 0 ? line.substring(0, spaceIdx) : line;
+      const args = spaceIdx > 0 ? line.substring(spaceIdx + 1) : '';
+      return {
+        index: idx + 1,
+        instruction: inst,
+        arguments: args,
+        status: 'pending' as const
+      };
+    }));
+
     const cacheEvaluation = this.cacheService.evaluateDockerfileCache(dockerfileRaw);
 
-    let progressIter = 0;
-    const executeStep = () => {
-      if (progressIter >= cleanLines.length) {
-        // Build completed! Create actual DockerImage record!
-        const imageId = 'img-' + Math.random().toString(36).substring(2, 10);
-        
+    // Set up ticking log ticker timer
+    let elapsedMs = 0;
+    const ticker = setInterval(() => {
+      elapsedMs += 100;
+      this.buildTimeElapsed.set(elapsedMs / 1000);
+    }, 100);
+
+    // Build standard event stream queue
+    interface QueueItem {
+      type: 'log' | 'progress' | 'step_status' | 'complete';
+      text?: string;
+      progress?: number;
+      stepIdx?: number;
+      stepStatus?: 'pending' | 'running' | 'completed' | 'cached';
+      stepHash?: string;
+    }
+
+    const queue: QueueItem[] = [];
+
+    // Handshake entries
+    queue.push({ type: 'log', text: 'Sending build context to Docker daemon  3.584 kB' });
+    queue.push({ type: 'progress', progress: 5 });
+    queue.push({ type: 'log', text: '[Docker Daemon Engine] Parsing local multi-stage instructions...' });
+    queue.push({ type: 'log', text: '[Docker Cache System] Evaluating layer dependency hashes...' });
+    queue.push({ type: 'progress', progress: 10 });
+
+    // Loop through instructions and construct line-by-line console logs
+    cleanLines.forEach((line, idx) => {
+      const cacheStatus = cacheEvaluation[idx];
+      const isCacheHit = cacheStatus && cacheStatus.status === 'hit';
+      const spaceIdx = line.indexOf(' ');
+      const inst = spaceIdx > 0 ? line.substring(0, spaceIdx) : line;
+      const args = spaceIdx > 0 ? line.substring(spaceIdx + 1) : '';
+      const upperInst = inst.toUpperCase();
+
+      if (isCacheHit) {
+        queue.push({ type: 'step_status', stepIdx: idx, stepStatus: 'running' });
+        queue.push({ type: 'progress', progress: Math.min(95, Math.round(((idx + 0.2) / cleanLines.length) * 100)) });
+        queue.push({ type: 'log', text: `Step ${idx + 1}/${cleanLines.length} : ${line}` });
+        queue.push({ type: 'log', text: ` ---> Using cache [${cacheStatus.hash || 'md5-cached-layer'}]` });
+        if (cacheStatus.cachedFromImageTag) {
+          queue.push({ type: 'log', text: ` ---> Restored file index context from image: ${cacheStatus.cachedFromImageTag}` });
+        }
+        queue.push({ type: 'step_status', stepIdx: idx, stepStatus: 'cached', stepHash: cacheStatus.hash || 'md5-cached-layer' });
+      } else {
+        queue.push({ type: 'step_status', stepIdx: idx, stepStatus: 'running' });
+        queue.push({ type: 'progress', progress: Math.min(95, Math.round(((idx + 0.2) / cleanLines.length) * 100)) });
+        queue.push({ type: 'log', text: `Step ${idx + 1}/${cleanLines.length} : ${line}` });
+
+        if (upperInst === 'FROM') {
+          queue.push({ type: 'log', text: ` ---> Pulling image layers from secure library...` });
+          queue.push({ type: 'log', text: ` ---> Layer [ea345b12]: Pulling fs segment [40%]` });
+          queue.push({ type: 'log', text: ` ---> Layer [ea345b12]: Pulling fs segment [85%]` });
+          queue.push({ type: 'log', text: ` ---> Layer [ea345b12]: Pull complete` });
+          queue.push({ type: 'log', text: ` ---> Layer [f7823e11]: Pull complete` });
+          queue.push({ type: 'log', text: ` ---> Base image checksum: sha256:d81347072c...` });
+        } else if (upperInst === 'WORKDIR') {
+          queue.push({ type: 'log', text: ` ---> Creating custom directory partition mounts...` });
+          queue.push({ type: 'log', text: ` ---> Working root target context initialized: ${args}` });
+        } else if (upperInst === 'RUN') {
+          if (args.includes('npm install') || args.includes('yarn')) {
+            queue.push({ type: 'log', text: ` ---> Bootstrapping project development module tree...` });
+            queue.push({ type: 'log', text: `npm info run package.json compile metadata parse` });
+            queue.push({ type: 'log', text: `npm http fetch GET https://registry.npmjs.org/express...` });
+            queue.push({ type: 'log', text: `npm http 200 https://registry.npmjs.org/express` });
+            queue.push({ type: 'log', text: `added 28 dependency packages in 1.1s` });
+          } else if (args.includes('apk add') || args.includes('apt-get')) {
+            queue.push({ type: 'log', text: ` ---> Retrieving alpine repository configurations...` });
+            queue.push({ type: 'log', text: `fetch http://dl-cdn.alpinelinux.org/alpine/v3.18/main/x86_64/APKINDEX.tar.gz` });
+            queue.push({ type: 'log', text: `Installing libc-dev, bash, build-essentials` });
+            queue.push({ type: 'log', text: `OK: packages installed cleanly, layout size 6.1MB` });
+          } else {
+            queue.push({ type: 'log', text: ` ---> Executing subshell instruction: ${args}` });
+            queue.push({ type: 'log', text: `[Docker Engine Output] Command exit code 0` });
+          }
+        } else if (upperInst === 'COPY') {
+          queue.push({ type: 'log', text: ` ---> Parsing local workspace source repositories...` });
+          queue.push({ type: 'log', text: ` ---> Imported 18 project files to virtual volume container (18.6 kB)` });
+        } else if (upperInst === 'ENV') {
+          queue.push({ type: 'log', text: ` ---> Binding environment variables in active pipeline namespace` });
+        } else if (upperInst === 'EXPOSE') {
+          queue.push({ type: 'log', text: ` ---> Exposing virtual proxy networking bridge port on host mapping list` });
+        } else {
+          queue.push({ type: 'log', text: ` ---> Resolved compiler layout signature instruction` });
+        }
+
+        const stepHash = 'layer-' + Math.random().toString(16).substring(2, 10);
+        queue.push({ type: 'log', text: ` ---> ${stepHash}` });
+        queue.push({ type: 'step_status', stepIdx: idx, stepStatus: 'completed', stepHash });
+      }
+    });
+
+    // Complete target compilation item
+    queue.push({ type: 'complete' });
+
+    // Process queue actions smoothly
+    const processQueue = () => {
+      if (queue.length === 0) {
+        clearInterval(ticker);
+        this.isBuilding.set(false);
+        this.activeBuildStepIndex.set(-1);
+        return;
+      }
+
+      const item = queue.shift()!;
+
+      if (item.type === 'log' && item.text) {
+        this.buildLogs.update(logs => [...logs, item.text!]);
+      } else if (item.type === 'progress' && item.progress !== undefined) {
+        this.buildProgress.set(item.progress);
+      } else if (item.type === 'step_status' && item.stepIdx !== undefined && item.stepStatus) {
+        this.activeBuildStepIndex.set(item.stepIdx);
+        this.buildTimelineSteps.update(steps => {
+          const next = [...steps];
+          if (next[item.stepIdx!]) {
+            next[item.stepIdx!].status = item.stepStatus!;
+            if (item.stepHash) {
+              next[item.stepIdx!].hash = item.stepHash;
+            }
+          }
+          return next;
+        });
+      } else if (item.type === 'complete') {
+        clearInterval(ticker);
+
         // Form custom environment variables compiled from the Dockerfile
         const compiledEnv: Record<string, string> = {};
         const exposedPorts: number[] = [];
@@ -1723,7 +1943,6 @@ CMD ["python3", "-m", "http.server", "8000"]`);
             if (!isNaN(portNum)) exposedPorts.push(portNum);
           } else if (inst.startsWith('CMD ')) {
             cmdStr = inst.substring(4).trim();
-            // clean brackets
             cmdStr = cmdStr.replace('[', '').replace(']', '').replace(/"/g, '').replace(/,/g, ' ');
           } else if (inst.startsWith('WORKDIR ')) {
             customWorkdir = inst.substring(8).trim();
@@ -1741,6 +1960,7 @@ CMD ["python3", "-m", "http.server", "8000"]`);
           content: `console.log("Custom app listening on ports: ${exposedPorts.join(',') || 'none'}");`
         };
 
+        const imageId = 'img-' + Math.random().toString(36).substring(2, 10);
         const newImageObj: DockerImage = {
           id: imageId,
           tag: tag,
@@ -1773,88 +1993,21 @@ CMD ["python3", "-m", "http.server", "8000"]`);
           ` ---> Size Saved: ${report.sizeSavedMb} MB | Estimated build-time saved: ${report.timeSavedSeconds}s`,
           `🟢 Build completed successfully!`
         ]);
+
         this.buildProgress.set(100);
         this.isBuilding.set(false);
+        this.activeBuildStepIndex.set(-1);
         return;
       }
 
-      const instruction = cleanLines[progressIter];
-      const stepIndex = progressIter + 1;
-      const stepLogs: string[] = [];
-      const cacheStatus = cacheEvaluation[progressIter];
-
-      this.buildProgress.set(Math.round(((stepIndex - 0.5) / cleanLines.length) * 100));
-
-      if (instruction.startsWith('FROM ')) {
-        const baseName = instruction.substring(5).trim();
-        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : FROM ${baseName}`);
-      } else if (instruction.startsWith('WORKDIR ')) {
-        const path = instruction.substring(8).trim();
-        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : WORKDIR ${path}`);
-      } else if (instruction.startsWith('RUN ')) {
-        const cmd = instruction.substring(4).trim();
-        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : RUN ${cmd}`);
-      } else if (instruction.startsWith('COPY ')) {
-        const payload = instruction.substring(5).trim();
-        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : COPY ${payload}`);
-      } else if (instruction.startsWith('EXPOSE ')) {
-        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : EXPOSE ${instruction.substring(7)}`);
-      } else {
-        stepLogs.push(`Step ${stepIndex}/${cleanLines.length} : ${instruction}`);
-      }
-
-      // Check for cache hit
-      const isCacheHit = cacheStatus && cacheStatus.status === 'hit';
-
-      if (isCacheHit) {
-        stepLogs.push(` ---> Using cache`);
-        stepLogs.push(` ---> Layer hash: ${cacheStatus.hash}`);
-        if (cacheStatus.cachedFromImageTag) {
-          stepLogs.push(` ---> Retained context from previous build of: ${cacheStatus.cachedFromImageTag}`);
-        }
-      } else {
-        if (instruction.startsWith('FROM ')) {
-          stepLogs.push(` ---> Pulling image layers from secure library...`);
-          stepLogs.push(` ---> Layer [00a2bfcf]: Pull complete`);
-          stepLogs.push(` ---> Native checksum: sha256:d81347072c...`);
-        } else if (instruction.startsWith('WORKDIR ')) {
-          stepLogs.push(` ---> Creating partition filesytem mounts...`);
-          stepLogs.push(` ---> Working directory target linked`);
-        } else if (instruction.startsWith('RUN ')) {
-          const cmd = instruction.substring(4).trim();
-          if (cmd.includes('npm install')) {
-            stepLogs.push(` ---> Executing local node setup...`);
-            stepLogs.push(`npm info run package.json compile metadata`);
-            stepLogs.push(`added 18 packages in 0.81s`);
-          } else if (cmd.includes('apk add') || cmd.includes('apt-get')) {
-            stepLogs.push(` ---> Triggering apk registry download...`);
-            stepLogs.push(`fetch http://dl-cdn.alpinelinux.org/alpine/v3.18/main/x86_64/APKINDEX.tar.gz`);
-            stepLogs.push(`OK: 18 packages, size 3.4MB`);
-          } else {
-            stepLogs.push(` ---> Executing command: ${cmd}`);
-          }
-        } else if (instruction.startsWith('COPY ')) {
-          stepLogs.push(` ---> Mapping host project workspaces...`);
-        } else if (instruction.startsWith('EXPOSE ')) {
-          stepLogs.push(` ---> Registered published virtual daemon socket listener`);
-        } else {
-          stepLogs.push(` ---> Registered image manifest instruction`);
-        }
-
-        const stepId = Math.random().toString(16).substring(2, 10);
-        stepLogs.push(` ---> ${stepId}`);
-      }
-
-      this.buildLogs.update(logsArr => [...logsArr, ...stepLogs]);
-      progressIter++;
-
-      // If cache hit, build steps incredibly fast! 150ms instead of 1000ms delay.
-      const delay = isCacheHit ? 150 : 1000;
-      setTimeout(executeStep, delay);
+      // Read cache status for dynamic delays
+      const isCurrentlyCached = item.stepIdx !== undefined && cacheEvaluation[item.stepIdx]?.status === 'hit';
+      const delay = isCurrentlyCached ? 45 : 190;
+      setTimeout(processQueue, delay);
     };
 
-    // run line builder
-    setTimeout(executeStep, 1200);
+    // Trigger process executor
+    setTimeout(processQueue, 350);
   }
 
   deleteImage(imgId: string) {

@@ -1499,18 +1499,131 @@
               <!-- Content Panel 2: Build Compiler logs panel -->
               @if (rightPaneSubTab() === 'logs') {
                 <div class="flex-1 space-y-3 overflow-hidden flex flex-col justify-between">
-                  <span class="text-xs text-slate-400 font-bold block bg-slate-900/60 p-2 rounded border border-slate-850 tracking-wider">
-                    📟 BUILD PIPELINE COMPILER LOGS STREAM
-                  </span>
                   
-                  <div class="flex-1 bg-black/40 font-mono text-[11px] p-3 rounded-lg border border-slate-900 leading-relaxed overflow-y-auto max-h-[280px]">
-                    @if (buildLogs().length === 0) {
-                      <span class="text-slate-500 italic block py-4 text-center">Engine waiting to parse instructions. Trigger Build sequence of Dockerfile on the left.</span>
+                  <!-- Interactive Pipeline Timeline -->
+                  @if (buildTimelineSteps().length > 0) {
+                    <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-900 space-y-2">
+                      <div class="flex justify-between items-center text-[10px] font-mono text-slate-400 border-b border-slate-900 pb-1.5 mb-2 select-none">
+                        <span class="flex items-center gap-1">
+                          <mat-icon class="text-xs text-blue-400">history_toggle_off</mat-icon>
+                          PIPELINE STAGE ASSEMBLY CHECKS
+                        </span>
+                        <span class="text-xs text-blue-400 font-bold font-mono">
+                          @if (isBuilding()) {
+                            Ticking: {{ buildTimeElapsed().toFixed(1) }}s
+                          } @else if (buildProgress() === 100) {
+                            Finished in {{ buildTimeElapsed().toFixed(1) }}s
+                          }
+                        </span>
+                      </div>
+                      <div class="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2">
+                        @for (step of buildTimelineSteps(); track step.index) {
+                          <div class="p-1.5 rounded-md border text-[10px] font-mono flex items-center gap-1.5 transition-all select-none"
+                            [class.border-blue-500/40]="step.status === 'running'"
+                            [class.bg-blue-500/5]="step.status === 'running'"
+                            [class.border-emerald-500/30]="step.status === 'completed'"
+                            [class.bg-emerald-500/5]="step.status === 'completed'"
+                            [class.border-amber-500/30]="step.status === 'cached'"
+                            [class.bg-amber-500/5]="step.status === 'cached'"
+                            [class.border-slate-900]="step.status === 'pending'"
+                            [class.opacity-40]="step.status === 'pending'">
+                            
+                            <!-- Icon Indicator -->
+                            @if (step.status === 'pending') {
+                              <mat-icon class="text-[12px] h-3 w-3 text-slate-500">hourglass_empty</mat-icon>
+                            } @else if (step.status === 'running') {
+                              <mat-icon class="text-[12px] h-3 w-3 text-blue-400 animate-spin">sync</mat-icon>
+                            } @else if (step.status === 'cached') {
+                              <mat-icon class="text-[12px] h-3 w-3 text-amber-400">offline_bolt</mat-icon>
+                            } @else if (step.status === 'completed') {
+                              <mat-icon class="text-[12px] h-3 w-3 text-emerald-400">check_circle</mat-icon>
+                            }
+
+                            <div class="truncate flex-1">
+                              <span class="text-[9px] text-slate-400">#{{ step.index }}</span>
+                              <strong class="text-white ml-1">{{ step.instruction }}</strong>
+                            </div>
+                            
+                            @if (step.status === 'cached') {
+                              <span class="text-[8px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded font-mono font-bold">HIT</span>
+                            }
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  } @else {
+                    <span class="text-xs text-slate-400 font-bold block bg-slate-900/60 p-2 rounded border border-slate-850 tracking-wider">
+                      📟 BUILD PIPELINE COMPILER LOGS STREAM
+                    </span>
+                  }
+
+                  <!-- Filtering Toolbar -->
+                  <div class="flex flex-col sm:flex-row gap-2 items-center justify-between bg-slate-950/40 p-2 rounded-lg border border-slate-900">
+                    <div class="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto select-none">
+                      <button (click)="buildLogFilterSeverity.set('all')"
+                        [class.bg-slate-900]="buildLogFilterSeverity() === 'all'" [class.text-white]="buildLogFilterSeverity() === 'all'" [class.border-slate-800]="buildLogFilterSeverity() === 'all'"
+                        class="px-2.5 py-1 text-[10px] font-bold duration-150 cursor-pointer rounded border border-transparent hover:bg-slate-800 text-slate-400">All</button>
+                      <button (click)="buildLogFilterSeverity.set('success')"
+                        [class.bg-emerald-950]="buildLogFilterSeverity() === 'success'" [class.text-emerald-400]="buildLogFilterSeverity() === 'success'" [class.border-emerald-900/40]="buildLogFilterSeverity() === 'success'"
+                        class="px-2.5 py-1 text-[10px] font-bold duration-150 cursor-pointer rounded border border-transparent hover:bg-slate-850 text-slate-400">Success</button>
+                      <button (click)="buildLogFilterSeverity.set('cache')"
+                        [class.bg-amber-950]="buildLogFilterSeverity() === 'cache'" [class.text-amber-400]="buildLogFilterSeverity() === 'cache'" [class.border-amber-900/40]="buildLogFilterSeverity() === 'cache'"
+                        class="px-2.5 py-1 text-[10px] font-bold duration-150 cursor-pointer rounded border border-transparent hover:bg-slate-850 text-slate-400">Cache Hits</button>
+                      <button (click)="buildLogFilterSeverity.set('warn')"
+                        [class.bg-rose-950]="buildLogFilterSeverity() === 'warn'" [class.text-rose-400]="buildLogFilterSeverity() === 'warn'" [class.border-rose-900/40]="buildLogFilterSeverity() === 'warn'"
+                        class="px-2.5 py-1 text-[10px] font-bold duration-150 cursor-pointer rounded border border-transparent hover:bg-slate-850 text-slate-400">Alerts</button>
+                    </div>
+
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                      <!-- Search Input -->
+                      <div class="relative flex-1 sm:flex-initial">
+                        <mat-icon class="absolute left-2 top-1.5 text-slate-500 scale-75">search</mat-icon>
+                        <input type="text" placeholder="Filter stream logs..."
+                          [value]="buildLogSearchQuery()"
+                          (input)="buildLogSearchQuery.set($any($event.target).value)"
+                          class="bg-black/40 border border-slate-800 text-[10px] rounded pl-7 pr-2 py-1 outline-none text-slate-350 w-full sm:w-40 focus:border-blue-500/50 duration-150" />
+                      </div>
+
+                      <!-- Clipboard utilities -->
+                      <div class="flex items-center gap-1 border-l border-slate-800/85 pl-2 select-none">
+                        <button (click)="copyBuildLogs()" title="Copy entire logs stream"
+                          class="p-1 text-slate-400 hover:text-white hover:bg-slate-800/60 transition duration-150 cursor-pointer rounded flex items-center justify-center">
+                          <mat-icon class="text-xs scale-90">{{ logCopied() ? 'check' : 'content_copy' }}</mat-icon>
+                        </button>
+                        <button (click)="downloadBuildLogs()" title="Download Logs File (.log)"
+                          class="p-1 text-slate-400 hover:text-white hover:bg-slate-800/60 transition duration-150 cursor-pointer rounded flex items-center justify-center">
+                          <mat-icon class="text-xs scale-90">download</mat-icon>
+                        </button>
+                        <button (click)="clearBuildLogs()" title="Purge console output"
+                          class="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800/60 transition duration-150 cursor-pointer rounded flex items-center justify-center">
+                          <mat-icon class="text-xs scale-90">delete_sweep</mat-icon>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Interactive Console Stream Terminal -->
+                  <div class="flex-1 bg-black/50 font-mono text-[11px] p-4 rounded-lg border border-slate-900 leading-relaxed overflow-y-auto max-h-[280px] space-y-1 relative" id="console-logs-container">
+                    @if (filteredBuildLogs().length === 0) {
+                      <div class="text-slate-500 italic py-12 text-center flex flex-col items-center justify-center gap-2 select-none">
+                        <mat-icon class="text-slate-600 scale-125">terminal</mat-icon>
+                        <span>
+                          @if (buildLogs().length === 0) {
+                            Engine waiting to compile. Trigger the Build sequence of your Dockerfile.
+                          } @else {
+                            No stream logs compiled match the actively filtered query profile.
+                          }
+                        </span>
+                      </div>
                     } @else {
-                      @for (line of buildLogs(); track $index) {
-                        <div class="block py-0.5"
-                          [class.text-emerald-400]="line.startsWith('🟢') || line.includes('Successfully')"
-                          [class.text-slate-350]="!line.startsWith('🟢') && !line.includes('Successfully')">
+                      @for (line of filteredBuildLogs(); track $index) {
+                        <div class="block py-0.5 whitespace-pre-wrap select-text"
+                          [class.text-emerald-400]="line.startsWith('🟢') || line.includes('Successfully built') || line.includes('Successfully tagged')"
+                          [class.text-emerald-500/80]="line.includes('complete') || line.includes('Complete') || line.includes('installed')"
+                          [class.text-amber-400]="line.includes('Using cache') || line.includes('cache')"
+                          [class.text-sky-400]="line.startsWith('Step')"
+                          [class.text-rose-400]="line.startsWith('🔴') || line.toLowerCase().includes('error')"
+                          [class.text-slate-350]="!line.startsWith('🟢') && !line.startsWith('Step') && !line.startsWith('🔴') && !line.includes('Using cache')">
                           {{ line }}
                         </div>
                       }
