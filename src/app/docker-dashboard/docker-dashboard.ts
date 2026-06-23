@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { DockerCacheService } from './docker-cache';
+import { DockerfileEditor } from './dockerfile-editor';
 import * as d3 from 'd3';
 
 // Simulated Models for Container Engine
