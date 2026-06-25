@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { DockerCacheService } from './docker-cache';
 import { DockerfileEditor } from './dockerfile-editor';
 import { ContainerDashboard } from './container-dashboard';
+import { NetworkVisualizer } from './network-visualizer';
 import * as d3 from 'd3';
 
 // Simulated Models for Container Engine
@@ -92,7 +93,7 @@ export interface DockerNetwork {
 
 @Component({
   selector: 'app-docker-dashboard',
-  imports: [CommonModule, ReactiveFormsModule, MatIconModule, DockerfileEditor, ContainerDashboard],
+  imports: [CommonModule, ReactiveFormsModule, MatIconModule, DockerfileEditor, ContainerDashboard, NetworkVisualizer],
   templateUrl: './docker-dashboard.html',
   styleUrl: './docker-dashboard.css',
 })

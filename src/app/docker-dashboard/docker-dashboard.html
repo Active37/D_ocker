@@ -2010,131 +2010,29 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
-              <!-- SVG Topology Map Layout (Col span 7) -->
-              <div class="lg:col-span-7 bg-[#050b15] border border-slate-800 rounded-xl p-5 shadow-inner flex flex-col items-center justify-between relative min-h-[380px]">
-                <div class="w-full flex items-center justify-between border-b border-slate-850 pb-2 mb-2">
-                  <span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
-                    <mat-icon class="text-purple-400 text-sm animate-spin">hub</mat-icon>
-                    Multi-Subnet Bridged Router Interconnection Topology Map
-                  </span>
-                  <span class="text-[9px] bg-slate-900 text-purple-400 border border-slate-800 px-2 py-0.5 rounded font-mono">
-                    {{ containers().length }} active nodes
-                  </span>
-                </div>
-
-                <!-- Canvas of Topology Nodes -->
-                <svg width="100%" height="320" viewBox="0 0 600 320" class="mx-auto relative select-none">
-                  <!-- SVG Gradient glow declarations -->
-                  <defs>
-                    <radialGradient id="wanGlow" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.1" />
-                      <stop offset="100%" stop-color="#a855f7" stop-opacity="0" />
-                    </radialGradient>
-                    <linearGradient id="hubGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#1e1b4b" />
-                      <stop offset="100%" stop-color="#311084" />
-                    </linearGradient>
-                  </defs>
-
-                  <!-- Central Host localhost External WAN Network Gateway Cloud -->
-                  <g transform="translate(300, 35)">
-                    <circle cx="0" cy="0" r="24" fill="#0f172a" stroke="#475569" stroke-width="2" />
-                    <circle cx="0" cy="0" r="14" fill="url(#wanGlow)" />
-                    <text x="0" y="-32" fill="#94a3b8" font-size="10" text-anchor="middle" font-weight="bold">LOCALHOST GATEWAY WAN</text>
-                    <text x="0" y="4" fill="#2496ed" font-size="10" text-anchor="middle" font-family="monospace" font-weight="bold">HOST</text>
-                  </g>
-
-                  <!-- Dynamic placement of network switch hub targets -->
-                  @let activeNets = networks();
-                  @let netCount = activeNets.length;
-                  @for (net of activeNets; track net.id) {
-                    @let spacing = netCount > 1 ? 440 / (netCount - 1) : 0;
-                    @let netX = netCount > 1 ? 80 + ($index * spacing) : 300;
-                    @let netY = 160;
-
-                    <!-- Trunk line link to Host Gateway WAN router -->
-                    <line [attr.x1]="300" [attr.y1]="35" [attr.x2]="netX" [attr.y2]="netY" 
-                          stroke="#334155" stroke-width="1.5" stroke-dasharray="3,3" />
-
-                    <!-- Network drop zone group wrapper -->
-                    <g [attr.transform]="'translate(' + netX + ',' + netY + ')'"
-                       (dragover)="onNetworkDragOver($event, net.id)"
-                       (dragleave)="onNetworkDragLeave()"
-                       (drop)="onNetworkDrop($event, net.name)"
-                       class="cursor-pointer group">
-                      
-                      <!-- Inner Highlight Glow if active dragging target -->
-                      @if (activeDropTargetNetworkId() === net.id) {
-                        <circle cx="0" cy="0" r="45" fill="none" stroke="#a855f7" stroke-width="2.5" class="animate-ping" />
-                      }
-
-                      <!-- Hub body circle -->
-                      <circle cx="0" cy="0" r="28" 
-                              [attr.fill]="activeDropTargetNetworkId() === net.id ? '#3b0764' : '#111827'" 
-                              [attr.stroke]="activeDropTargetNetworkId() === net.id ? '#c084fc' : '#a855f7'" 
-                              [attr.stroke-width]="activeDropTargetNetworkId() === net.id ? '4' : '2.5'" />
-                      
-                      <!-- Switch Core Icon symbol -->
-                      <polygon points="-8,4 8,4 4,-4 -4,-4" fill="none" stroke="#e9d5ff" stroke-width="1.5" />
-                      <line x1="-8" y1="-2" x2="8" y2="-2" stroke="#e9d5ff" stroke-width="1" />
-                      
-                      <!-- Switch Labels text -->
-                      <text x="0" y="44" fill="#f8fafc" font-size="10" text-anchor="middle" font-weight="bold" class="drop-shadow-sm">{{ net.name }}</text>
-                      <text x="0" y="56" fill="#a855f7" font-size="8" font-family="monospace" text-anchor="middle" font-weight="semibold">{{ net.subnet || 'host IP router' }}</text>
-
-                      <!-- Connected container orbiter links -->
-                      @let netContainers = getContainersInNetwork(net.name);
-                      @for (c of netContainers; track c.id) {
-                        @if (c.status === 'running') {
-                          @let cCount = netContainers.length;
-                          @let angle = ($index * 360 / (cCount || 1)) + 45;
-                          @let cxCoord = 65 * cosTable(angle);
-                          @let cyCoord = 70 * sinTable(angle);
-
-                          <!-- Dynamic cable links to endpoints -->
-                          <line x1="0" y1="0" [attr.x2]="cxCoord" [attr.y2]="cyCoord" 
-                                stroke="#a855f7" stroke-opacity="0.6" stroke-width="1.5" stroke-dasharray="4,4" />
-
-                          <!-- Draggable container Puck nested group -->
-                          <g [attr.transform]="'translate(' + cxCoord + ',' + cyCoord + ')'"
-                             draggable="true"
-                             (dragstart)="onContainerDragStart($event, c.id)"
-                             (dragend)="onContainerDragEnd()"
-                             class="cursor-grab active:cursor-grabbing hover:scale-110 transition duration-150">
-                            
-                            <!-- Container base node -->
-                            <circle cx="0" cy="0" r="18" fill="#1e1b4b" stroke="#10b981" stroke-width="2" class="hover:stroke-blue-400" />
-                            <circle cx="0" cy="0" r="5" fill="#10b981" class="animate-pulse" />
-
-                            <!-- Label tags placed dynamically -->
-                            <!-- Align to alternate positions to avoid collision overlapping -->
-                            @let textOffset = cyCoord > 0 ? 25 : -20;
-                            <text x="0" [attr.y]="textOffset" fill="#ffffff" font-size="9" font-weight="bold" text-anchor="middle" class="bg-black/80">{{ c.name }}</text>
-                            <text x="0" [attr.y]="textOffset + 10" fill="#34d399" font-size="8.5" font-family="monospace" text-anchor="middle">{{ c.ipAddress }}</text>
-                          </g>
-                        }
-                      }
-                    </g>
-                  }
-                </svg>
-
-                <div class="w-full text-center text-[10px] text-slate-500 pt-3 border-t border-slate-900 flex justify-between font-mono">
-                  <span>📌 Drag any container puck inside the map to move networks</span>
-                  <span>⚡ Topology resolves in real-time</span>
-                </div>
+              <!-- Dynamic D3 Force-Directed Network Graph Visualizer -->
+              <div class="lg:col-span-12">
+                <app-network-visualizer
+                  [networks]="networks()"
+                  [containers]="containers()"
+                  (moveContainer)="moveContainerToNetwork($event.containerId, $event.networkName)">
+                </app-network-visualizer>
               </div>
 
-              <!-- Subnets Directory cards list (Col span 5) -->
-              <div class="lg:col-span-5 space-y-4 text-xs font-medium">
-                <span class="text-xs text-slate-400 font-bold block uppercase tracking-wider text-left pl-1">
-                  Custom Bridge Network Drop Zones
-                </span>
+              <!-- Subnets Directory Grid -->
+              <div class="lg:col-span-12 space-y-4 text-xs font-medium">
+                <div class="flex items-center justify-between border-b border-slate-800/60 pb-2">
+                  <span class="text-xs text-slate-450 font-bold uppercase tracking-wider pl-1">
+                    Custom Bridge Network Control & Drop Zones
+                  </span>
+                  <span class="text-[10px] text-slate-500 italic">Drag running containers near any network router node above or assign below to connect</span>
+                </div>
                 
-                <div class="space-y-4 max-h-[360px] overflow-y-auto pr-1">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                   @for (net of networks(); track net.id) {
                     
                     <!-- Subnet Drop Card Zone -->
-                    <div class="bg-[#050b14] p-4 rounded-xl border transition-all duration-300 space-y-3 relative overflow-hidden text-left"
+                    <div class="bg-[#050b14]/90 p-4.5 rounded-xl border transition-all duration-300 space-y-3 relative overflow-hidden text-left"
                          [class.border-purple-600/30]="draggedContainerId()"
                          [class.border-purple-500]="activeDropTargetNetworkId() === net.id"
                          [class.bg-purple-950/10]="activeDropTargetNetworkId() === net.id"
@@ -2185,7 +2083,7 @@
                         @for (c of connectedList; track c.id) {
                           <div class="bg-[#0b1323]/80 p-2 rounded-lg border border-slate-800/80 flex items-center justify-between font-mono gap-4 select-none">
                             <div class="flex items-center gap-1.5 min-w-0">
-                              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                               <span class="text-slate-200 font-bold text-[11px] truncate">{{ c.name }}</span>
                             </div>
                             <div class="flex items-center gap-2">
@@ -2201,7 +2099,7 @@
                             </div>
                           </div>
                         } @empty {
-                          <span class="text-slate-500 italic block pl-1 text-[10px]">No container instances attached to this virtual subnet bridge. Drag a container puck here above!</span>
+                          <span class="text-slate-500 italic block pl-1 text-[10px] py-1">No container instances attached to this virtual subnet bridge.</span>
                         }
                       </div>
 
@@ -2214,13 +2112,12 @@
                       }
                     </div>
                   } @empty {
-                    <div class="text-slate-500 italic text-center py-8 bg-[#050b15] border border-slate-850 rounded-xl">
+                    <div class="col-span-full text-slate-500 italic text-center py-8 bg-[#050b15] border border-slate-850 rounded-xl">
                       <p class="text-xs">No subnets configured yet.</p>
                     </div>
                   }
                 </div>
               </div>
-
             </div>
           </div>
         </div>
